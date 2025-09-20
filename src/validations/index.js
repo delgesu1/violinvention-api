@@ -1,0 +1,15 @@
+module.exports.authValidation = require('./auth.validation');
+module.exports.userValidation = require('./user.validation');
+module.exports.centerValidation = require('./center.validation');
+module.exports.roleValidation = require('./role.validation');
+module.exports.routeValidation = require('./route.validation');
+module.exports.userDocumentValidation = require('./user-document.validation');
+module.exports.userValidation = require('./user.validation');
+module.exports.vehicleValidation = require('./vehicle.validation');
+module.exports.vehicleDocumentValidation = require('./vehicle-document.validation');
+module.exports.fuelActivityValidation = require('./fuel-activity.validation');
+module.exports.dailyActivityValidation = require('./daily-activity.validation');
+module.exports.fuelingStationValidation = require('./fueling-station.validation');
+module.exports.SiteWiseMonthlyReportValidation = require('./reports.validation');
+module.exports.SiteWiseDailyReportValidation = require('./site-wise-daily-report.validation');
+module.exports.importCsvValidation = require('./import-csv.validation');
