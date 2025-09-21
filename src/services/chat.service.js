@@ -67,6 +67,7 @@ const getAllChats = async (user) => {
         .from('chats')
         .select('*')
         .eq('user_id', user.id)
+        .eq('is_deleted', false)
         .order('updated_at', { ascending: false });
 
     if (error) {
@@ -94,11 +95,14 @@ const deleteChat = async (user, chat_id) => {
     
     // Note: Responses API conversations are managed implicitly
     // No explicit deletion needed - they are cleaned up automatically by OpenAI
-    // Just delete the Supabase chat record
-    
+    // Use soft delete to maintain data integrity and sync with mobile app
+
     const { error: deleteError } = await supabase
         .from('chats')
-        .delete()
+        .update({
+            is_deleted: true,
+            updated_at: new Date().toISOString()
+        })
         .eq('chat_id', chat_id)
         .eq('user_id', user.id);
 
