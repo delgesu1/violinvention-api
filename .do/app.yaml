@@ -1,0 +1,64 @@
+name: violinvention-api
+region: nyc
+
+# Main API service
+services:
+- name: api
+  source_dir: /
+  github:
+    repo: delgesu1/violinvention-api
+    branch: main
+  run_command: npm start
+  environment_slug: node-js
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  http_port: 8080
+
+  envs:
+  - key: NODE_ENV
+    value: production
+  - key: PORT
+    value: "8080"
+  - key: PDF_SERVICE_URL
+    value: http://pdf-service:3001
+  # Add your other environment variables here:
+  # - key: OPENAI_API_KEY
+  #   scope: RUN_TIME
+  #   type: SECRET
+  # - key: SUPABASE_URL
+  #   scope: RUN_TIME
+  #   type: SECRET
+  # etc.
+
+  health_check:
+    http_path: /v1/docs
+
+# PDF generation service
+- name: pdf-service
+  source_dir: /pdf-service
+  github:
+    repo: delgesu1/violinvention-api
+    branch: main
+  run_command: npm start
+  environment_slug: node-js
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  http_port: 3001
+
+  envs:
+  - key: NODE_ENV
+    value: production
+  - key: PORT
+    value: "3001"
+
+  health_check:
+    http_path: /health
+
+# Routing configuration
+ingress:
+  rules:
+  - match:
+      path:
+        prefix: /
+    component:
+      name: api

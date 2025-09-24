@@ -1,0 +1,21 @@
+{
+  "name": "pdf-service",
+  "version": "1.0.0",
+  "description": "PDF generation service using Playwright",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "express": "^4.17.1",
+    "playwright": "^1.40.0",
+    "cors": "^2.8.5",
+    "helmet": "^4.1.0",
+    "morgan": "^1.9.1",
+    "compression": "^1.7.4"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.0"
+  }
+}
