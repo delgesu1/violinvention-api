@@ -23,14 +23,19 @@ let browser = null;
 
 // Ensure Playwright browsers are installed
 async function ensureBrowsersInstalled() {
-  try {
-    // Check if chromium is installed by trying to get the executable path
-    await chromium.executablePath();
-    console.log('Playwright browsers already installed');
-  } catch (error) {
-    console.log('Installing Playwright browsers...');
+  const browserPath = process.env.PLAYWRIGHT_BROWSERS_PATH || '/workspace/pdf-service/.playwright-browsers';
+  const execPath = path.join(browserPath, 'chromium-1193/chrome-linux/chrome');
+
+  if (fs.existsSync(execPath)) {
+    console.log('Browsers found at:', execPath);
+  } else {
+    console.log('Installing Playwright browsers to:', browserPath);
     try {
-      execSync('npx playwright install chromium', { stdio: 'inherit' });
+      // Create the directory first
+      fs.mkdirSync(browserPath, { recursive: true });
+
+      // Install browsers to the persistent location
+      execSync(`PLAYWRIGHT_BROWSERS_PATH=${browserPath} npx playwright install chromium`, { stdio: 'inherit' });
       console.log('Browsers installed successfully');
     } catch (installError) {
       console.error('Failed to install browsers:', installError);
