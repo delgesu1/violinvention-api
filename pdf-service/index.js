@@ -112,6 +112,11 @@ app.post('/generate', async (req, res) => {
       });
     }
 
+    // Debug logging to see what HTML we're receiving
+    console.log('Received HTML content length:', html.length);
+    console.log('HTML content starts with:', html.substring(0, 200));
+    console.log('HTML content type:', typeof html);
+
     if (!browser) {
       return res.status(503).json({
         error: 'PDF service not ready',
