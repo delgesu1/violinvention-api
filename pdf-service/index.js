@@ -21,28 +21,7 @@ app.use(express.json({ limit: '10mb' }));
 // Global browser instance for efficiency
 let browser = null;
 
-// Ensure Playwright browsers are installed
-async function ensureBrowsersInstalled() {
-  const browserPath = process.env.PLAYWRIGHT_BROWSERS_PATH || '/workspace/pdf-service/.playwright-browsers';
-  const execPath = path.join(browserPath, 'chromium-1193/chrome-linux/chrome');
-
-  if (fs.existsSync(execPath)) {
-    console.log('Browsers found at:', execPath);
-  } else {
-    console.log('Installing Playwright browsers to:', browserPath);
-    try {
-      // Create the directory first
-      fs.mkdirSync(browserPath, { recursive: true });
-
-      // Install browsers to the persistent location
-      execSync(`PLAYWRIGHT_BROWSERS_PATH=${browserPath} npx playwright install chromium`, { stdio: 'inherit' });
-      console.log('Browsers installed successfully');
-    } catch (installError) {
-      console.error('Failed to install browsers:', installError);
-      throw installError;
-    }
-  }
-}
+// Browser is pre-installed in Playwright Docker image
 
 // Initialize Playwright browser
 async function initBrowser() {
@@ -52,12 +31,7 @@ async function initBrowser() {
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu'
+        '--disable-dev-shm-usage'
       ]
     });
     console.log('Playwright browser initialized');
@@ -155,7 +129,8 @@ app.post('/generate', async (req, res) => {
       try {
         // Set content with proper viewport
         await page.setContent(html, {
-          waitUntil: 'networkidle'
+          waitUntil: 'networkidle',
+          timeout: 8000
         });
 
         // Set viewport for consistent rendering
@@ -166,7 +141,7 @@ app.post('/generate', async (req, res) => {
 
         // Generate PDF with optimized settings
         const pdfBuffer = await page.pdf({
-          format: 'letter',
+          format: 'Letter',
           margin: {
             top: '0.5in',
             right: '0.5in',
@@ -223,7 +198,6 @@ app.post('/generate', async (req, res) => {
 
 // Start server and initialize browser
 async function startServer() {
-  await ensureBrowsersInstalled();
   await initBrowser();
 
   app.listen(PORT, () => {
