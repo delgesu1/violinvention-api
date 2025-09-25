@@ -4,6 +4,9 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
 const { chromium } = require('playwright');
+const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -17,6 +20,24 @@ app.use(express.json({ limit: '10mb' }));
 
 // Global browser instance for efficiency
 let browser = null;
+
+// Ensure Playwright browsers are installed
+async function ensureBrowsersInstalled() {
+  try {
+    // Check if chromium is installed by trying to get the executable path
+    await chromium.executablePath();
+    console.log('Playwright browsers already installed');
+  } catch (error) {
+    console.log('Installing Playwright browsers...');
+    try {
+      execSync('npx playwright install chromium', { stdio: 'inherit' });
+      console.log('Browsers installed successfully');
+    } catch (installError) {
+      console.error('Failed to install browsers:', installError);
+      throw installError;
+    }
+  }
+}
 
 // Initialize Playwright browser
 async function initBrowser() {
@@ -197,6 +218,7 @@ app.post('/generate', async (req, res) => {
 
 // Start server and initialize browser
 async function startServer() {
+  await ensureBrowsersInstalled();
   await initBrowser();
 
   app.listen(PORT, () => {
