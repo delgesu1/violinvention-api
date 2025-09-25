@@ -40,7 +40,7 @@ services:
     repo: delgesu1/violinvention-api
     branch: main
   run_command: npm start
-  environment_slug: node-js
+  dockerfile_path: pdf-service/Dockerfile
   instance_count: 1
   instance_size_slug: basic-xxs
   http_port: 3001
