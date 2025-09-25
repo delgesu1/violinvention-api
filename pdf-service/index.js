@@ -164,10 +164,10 @@ app.post('/generate', async (req, res) => {
         const pdfBuffer = await page.pdf({
           format: 'Letter',
           margin: {
-            top: '0.5in',
-            right: '0.5in',
-            bottom: '0.5in',
-            left: '0.5in'
+            top: '0.75in',
+            right: '0.75in',
+            bottom: '0.75in',
+            left: '0.75in'
           },
           printBackground: true,
           preferCSSPageSize: false,
