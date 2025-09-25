@@ -170,7 +170,7 @@ app.post('/generate', async (req, res) => {
             left: '0.5in'
           },
           printBackground: true,
-          preferCSSPageSize: true,
+          preferCSSPageSize: false,
           displayHeaderFooter: false
         });
 
