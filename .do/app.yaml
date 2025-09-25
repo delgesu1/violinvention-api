@@ -31,7 +31,7 @@ services:
   # etc.
 
   health_check:
-    http_path: /v1/docs
+    http_path: /v1/health
 
 # PDF generation service
 - name: pdf-service
