@@ -8,6 +8,18 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+// Simple HTML entity decoder
+function decodeHTMLEntities(text) {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x2F;/g, '/')
+    .replace(/&#x3D;/g, '=');
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -117,6 +129,10 @@ app.post('/generate', async (req, res) => {
     console.log('HTML content starts with:', html.substring(0, 200));
     console.log('HTML content type:', typeof html);
 
+    // Decode HTML entities if present
+    const decodedHTML = decodeHTMLEntities(html);
+    console.log('Decoded HTML starts with:', decodedHTML.substring(0, 100));
+
     if (!browser) {
       return res.status(503).json({
         error: 'PDF service not ready',
@@ -133,7 +149,7 @@ app.post('/generate', async (req, res) => {
 
       try {
         // Set content with proper viewport
-        await page.setContent(html, {
+        await page.setContent(decodedHTML, {
           waitUntil: 'networkidle',
           timeout: 8000
         });
