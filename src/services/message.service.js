@@ -3,6 +3,7 @@ const { openaiClient, PROMPT_ID, PROMPT_VERSION, botClient, PROMPT_ID_BOT, PROMP
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 const { createChatWithFirstMessage } = require('./chat.service');
+const { getBrief, saveBrief, updateBrief, toWire, generateOutline, approxTokens } = require('./brief.service');
 
 
 // Format Responses API streaming events for frontend compatibility
@@ -85,6 +86,13 @@ const formatResponseEventForFrontend = (responseEvent) => {
             return null;
     }
 };
+
+// Memory card instruction for conversation context management
+// Uses sentinel parsing approach for reliability
+const MEMORY_INSTRUCTION = `
+At the end of your response, update conversation memory using this exact format:
+<MEMORY_CARD>{"goal":"Master vibrato technique","decisions":["Practice 10 min daily"],"open_q":["Speed vs accuracy?"],"techniques":["vibrato"],"lesson_context":"intermediate vibrato"}</MEMORY_CARD>
+Keep the JSON under 120 tokens total.`;
 
 const sendMessage = async ({ message, chat_id, instruction_token, lesson_context, user, req, res }) => {
     res.writeHead(200, { "Content-type": "text/plain" });
@@ -182,19 +190,48 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         }
         // Note: last_message_at and updated_at are handled by frontend when message completes
 
+        // LOAD CONVERSATION CONTEXT
+        const brief = await getBrief(chat_id);
+        const wireBrief = toWire(brief);
+
+        // Get last assistant message outline for context
+        const { data: lastMessage } = await supabase
+            .from('messages')
+            .select('outline')
+            .eq('chat_id', chat_id)
+            .eq('role', 'assistant')
+            .not('outline', 'is', null)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        const lastOutline = lastMessage?.outline || "";
+
+        // BUILD INPUT WITH CONVERSATION CONTEXT
+        const contextualInput = [
+            wireBrief && `Conversation context: ${wireBrief}`,
+            lastOutline && `Previous response outline: ${lastOutline}`,
+            userMessageContent,
+            MEMORY_INSTRUCTION
+        ].filter(Boolean).join('\n\n');
+
+        console.log('[Conversation Context] Brief tokens:', approxTokens(wireBrief));
+        console.log('[Conversation Context] Outline tokens:', approxTokens(lastOutline));
+        console.log('[Conversation Context] Total context tokens:', approxTokens(contextualInput));
+
         // Create response using Responses API (OpenAI SDK 5.x)
-        console.log('[OpenAI API] About to call with FIXED prompt structure:', {
+        console.log('[OpenAI API] About to call with conversation context:', {
             prompt_id: PROMPT_ID,
             version: PROMPT_VERSION,
-            inputLength: userMessageContent.length
+            inputLength: contextualInput.length
         });
-        
+
         const responseStream = await openaiClient.responses.create({
             prompt: {
                 id: PROMPT_ID,
                 version: PROMPT_VERSION
             },
-            input: userMessageContent,
+            input: contextualInput,
             stream: true,
             // Pass lesson context as metadata if provided
             ...(lesson_context && { 
@@ -295,14 +332,38 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
             res.write(errorEvent);
         }
     } finally {
-        // Save assistant message to database
+        // Save assistant message and update conversation context
         if (assistantMessage && !abortController.signal.aborted) {
             try {
+                let outline = "";
+
+                // Extract MEMORY_CARD with sentinel parsing (more reliable than regex)
+                const memoryMatch = assistantMessage.match(/<MEMORY_CARD>([\s\S]*?)<\/MEMORY_CARD>/);
+
+                if (memoryMatch) {
+                    try {
+                        const memoryCard = JSON.parse(memoryMatch[1].trim());
+                        const updatedBrief = updateBrief(brief, memoryCard);
+                        await saveBrief(chat_id, user.id, updatedBrief);
+                        console.log('[Brief Updated] New token count:', approxTokens(toWire(updatedBrief)));
+
+                        // Remove MEMORY_CARD from displayed message
+                        assistantMessage = assistantMessage.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>/, '').trim();
+                    } catch (parseError) {
+                        console.error('[MEMORY_CARD] Parse error, keeping previous brief:', parseError);
+                    }
+                }
+
+                // Generate outline for next turn
+                outline = generateOutline(assistantMessage);
+
+                // Save assistant message with outline
                 const { error: saveError } = await supabase
                     .from('messages')
                     .insert({
                         role: 'assistant',
                         content: assistantMessage,
+                        outline: outline,
                         chat_id,
                         user_id: user.id,
                         response_id: responseId,
@@ -505,19 +566,35 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
             throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, `Failed to save user message: ${msgError.message}`);
         }
 
+        // Initialize brief for first message (will be populated after response)
+        const initialBrief = {
+            goal: "",
+            constraints: [],
+            decisions: [],
+            open_q: [],
+            techniques: [],
+            lesson_context: lesson_context?.type || ""
+        };
+
+        // Build input with MEMORY_INSTRUCTION for first message
+        const contextualInput = [
+            userMessageContent,
+            MEMORY_INSTRUCTION
+        ].join('\n\n');
+
         // Create response using Responses API (OpenAI SDK 5.x)
-        console.log('[OpenAI API] About to call with FIXED prompt structure:', {
+        console.log('[OpenAI API] About to call with MEMORY instruction (first message):', {
             prompt_id: PROMPT_ID,
             version: PROMPT_VERSION,
-            inputLength: userMessageContent.length
+            inputLength: contextualInput.length
         });
-        
+
         const responseStream = await openaiClient.responses.create({
             prompt: {
                 id: PROMPT_ID,
                 version: PROMPT_VERSION
             },
-            input: userMessageContent,
+            input: contextualInput,
             stream: true,
             // Pass lesson context as metadata if provided
             ...(lesson_context && { 
@@ -618,14 +695,45 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
             res.write(errorEvent);
         }
     } finally {
-        // Save assistant message to database
+        // Save assistant message and initialize conversation context
         if (assistantMessage && !abortController.signal.aborted) {
             try {
+                let outline = "";
+
+                // Extract MEMORY_CARD for initial brief creation
+                const memoryMatch = assistantMessage.match(/<MEMORY_CARD>([\s\S]*?)<\/MEMORY_CARD>/);
+
+                if (memoryMatch) {
+                    try {
+                        const memoryCard = JSON.parse(memoryMatch[1].trim());
+                        const updatedBrief = updateBrief(initialBrief, memoryCard);
+                        await saveBrief(chatId, user.id, updatedBrief);
+                        console.log('[First Message] Brief created with token count:', approxTokens(toWire(updatedBrief)));
+
+                        // Remove MEMORY_CARD from displayed message
+                        assistantMessage = assistantMessage.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>/, '').trim();
+                    } catch (parseError) {
+                        console.error('[MEMORY_CARD] Parse error on first message, saving default brief:', parseError);
+                        // Save default brief even if parsing fails
+                        await saveBrief(chatId, user.id, initialBrief);
+                    }
+                } else {
+                    // No MEMORY_CARD found, save default brief
+                    console.log('[First Message] No MEMORY_CARD found, saving default brief');
+                    await saveBrief(chatId, user.id, initialBrief);
+                }
+
+                // Generate outline for next turn
+                outline = generateOutline(assistantMessage);
+
+                // Save assistant message with outline and mark as initial
                 const { error: saveError } = await supabase
                     .from('messages')
                     .insert({
                         role: 'assistant',
                         content: assistantMessage,
+                        outline: outline,
+                        is_initial: true, // Mark first assistant response
                         chat_id: chatId,
                         user_id: user.id,
                         response_id: responseId,
