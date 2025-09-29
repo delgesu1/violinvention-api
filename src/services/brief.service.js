@@ -27,6 +27,18 @@ const approxTokens = (s) => {
   return Math.ceil(s.length / 4);
 };
 
+// Detect if an outline contains substantial content
+const isContentfulOutline = (outline) => {
+  if (!outline || typeof outline !== 'string') return false;
+
+  const tokens = approxTokens(outline);
+  const hasNumberedItems = (outline.match(/\b\d+\.\s/g) || []).length >= 3;
+  const hasBullets = (outline.match(/^\s*[-*]\s+/gm) || []).length >= 3;
+  const hasHeaders = (outline.match(/^#{1,3}\s+/gm) || []).length >= 2;
+
+  return tokens >= 60 || hasNumberedItems || hasBullets || hasHeaders;
+};
+
 // Utility functions for array and string clamping
 const clampArr = (arr, n) => (Array.isArray(arr) ? arr.slice(-n) : []);
 
@@ -210,5 +222,6 @@ module.exports = {
   updateBrief,
   toWire,
   generateOutline,
-  approxTokens // Export for consistent token counting across services
+  approxTokens, // Export for consistent token counting across services
+  isContentfulOutline // Export for outline content detection
 };

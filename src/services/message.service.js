@@ -3,7 +3,7 @@ const { openaiClient, PROMPT_ID, PROMPT_VERSION, botClient, PROMPT_ID_BOT, PROMP
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 const { createChatWithFirstMessage } = require('./chat.service');
-const { getBrief, saveBrief, updateBrief, toWire, generateOutline, approxTokens } = require('./brief.service');
+const { getBrief, saveBrief, updateBrief, toWire, generateOutline, approxTokens, isContentfulOutline } = require('./brief.service');
 const { createMemoryCardFilter } = require('./memoryCardFilter');
 
 // Helper function to extract text from various event shapes
@@ -234,29 +234,64 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         brief = await getBrief(chat_id);
         const wireBrief = toWire(brief);
 
-        // Get last assistant message outline for context
-        const { data: lastMessage } = await supabase
-            .from('messages')
-            .select('outline')
-            .eq('chat_id', chat_id)
-            .eq('role', 'assistant')
-            .not('outline', 'is', null)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
+        // Get both initial and recent assistant message outlines for context
+        const [{ data: initialMessage }, { data: recentMessage }] = await Promise.all([
+            // Get initial outline (from first assistant message)
+            supabase
+                .from('messages')
+                .select('outline')
+                .eq('chat_id', chat_id)
+                .eq('role', 'assistant')
+                .eq('is_initial', true)
+                .not('outline', 'is', null)
+                .single(),
+            // Get most recent outline
+            supabase
+                .from('messages')
+                .select('outline')
+                .eq('chat_id', chat_id)
+                .eq('role', 'assistant')
+                .not('outline', 'is', null)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single()
+        ]);
 
-        const lastOutline = lastMessage?.outline || "";
+        const initialOutline = initialMessage?.outline || "";
+        const recentOutline = recentMessage?.outline || "";
+
+        // Determine which outlines to include based on content
+        const useInitial = isContentfulOutline(initialOutline);
+        const useRecent = isContentfulOutline(recentOutline);
+        const outlinesDiffer = initialOutline !== recentOutline;
 
         // BUILD INPUT WITH CONVERSATION CONTEXT
+        const outlineContext = [];
+
+        // Include initial outline if contentful
+        if (useInitial && outlinesDiffer) {
+            outlineContext.push(`Initial response outline: ${initialOutline}`);
+        }
+
+        // Include recent outline if contentful or if no initial outline
+        if (useRecent && (outlinesDiffer || !useInitial)) {
+            outlineContext.push(`Previous response outline: ${recentOutline}`);
+        } else if (!useRecent && !useInitial && recentOutline) {
+            // Fallback to recent even if not contentful if we have nothing else
+            outlineContext.push(`Previous response outline: ${recentOutline}`);
+        }
+
         const contextualInput = [
             wireBrief && `Conversation context: ${wireBrief}`,
-            lastOutline && `Previous response outline: ${lastOutline}`,
+            ...outlineContext,
             userMessageContent,
             MEMORY_INSTRUCTION
         ].filter(Boolean).join('\n\n');
 
         console.log('[Conversation Context] Brief tokens:', approxTokens(wireBrief));
-        console.log('[Conversation Context] Outline tokens:', approxTokens(lastOutline));
+        console.log('[Conversation Context] Initial outline tokens:', approxTokens(initialOutline));
+        console.log('[Conversation Context] Recent outline tokens:', approxTokens(recentOutline));
+        console.log('[Conversation Context] Using initial:', useInitial, 'Using recent:', useRecent);
         console.log('[Conversation Context] Total context tokens:', approxTokens(contextualInput));
 
         // Create response using Responses API (OpenAI SDK 5.x)
