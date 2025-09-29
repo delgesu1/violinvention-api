@@ -4,17 +4,18 @@ const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 const { createChatWithFirstMessage } = require('./chat.service');
 const { getBrief, saveBrief, updateBrief, toWire, generateOutline, approxTokens } = require('./brief.service');
+const { createMemoryCardFilter } = require('./memoryCardFilter');
 
-
-// Helper function to strip MEMORY_CARD content from text and capture card data
-const stripMemoryCard = (text) => {
-    if (!text || typeof text !== 'string') return { cleanText: text, cardContent: null };
-
-    const match = text.match(/<MEMORY_CARD>([\s\S]*?)<\/MEMORY_CARD>/);
-    const cleanText = text.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>/g, '');
-    const cardContent = match ? match[1].trim() : null;
-
-    return { cleanText, cardContent };
+// Helper function to extract text from various event shapes
+const getTextDelta = (ev) => {
+    return (
+        ev.delta ??
+        ev.text ??
+        ev.content ??
+        ev.response?.output_text?.delta ??   // nested case
+        ev.message?.content?.[0]?.text?.delta ??
+        ""
+    );
 };
 
 // Format Responses API streaming events for frontend compatibility
@@ -139,6 +140,27 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
     let brief = null;
     let assistantMessageClean = "";
     let capturedCard = null;
+
+    // Create stateful filter for this request
+    const filter = createMemoryCardFilter();
+
+    // Helper function to write sanitized UI and accumulate clean text
+    const writeUI = (ui) => {
+        if (!ui) return;
+        // Optional guard to detect any leaks
+        if (/<MEMORY_CARD>/.test(ui)) {
+            console.error("SANITIZER FAIL: tag reached UI chunk");
+        }
+        const sanitizedEvent = JSON.stringify({
+            event: 'content.delta',
+            data: {
+                id: 'response',
+                text: ui
+            }
+        }) + '\n';
+        res.write(sanitizedEvent);
+        assistantMessageClean += ui;
+    };
 
     try {
         const { data: chat, error: chatError } = await supabase
@@ -275,33 +297,17 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                 isFirstEvent = false;
             }
 
-            // Process events by type - handle sanitization BEFORE sending to UI
+            // Process events by type with stateful filtering
             const eventType = event.type || event.event;
 
             if (eventType === 'response.output_text.delta' || eventType === 'output_text.delta' || eventType === 'content.delta') {
-                // Delta events: sanitize first, then send to UI
-                const rawText = event.delta || event.text || event.content || '';
-                const { cleanText, cardContent } = stripMemoryCard(rawText);
+                // Delta events: process through stateful filter
+                const rawText = getTextDelta(event);
+                const { ui, card } = filter.feed(rawText);
 
-                // Accumulate clean text for database storage
-                assistantMessageClean += cleanText;
-
-                // Capture MEMORY_CARD if found
-                if (cardContent && !capturedCard) {
-                    capturedCard = cardContent;
-                }
-
-                // Send ONLY sanitized text to frontend
-                if (cleanText) {
-                    const sanitizedEvent = JSON.stringify({
-                        event: 'content.delta',
-                        data: {
-                            id: event.response?.id || event.id || 'response',
-                            text: cleanText
-                        }
-                    }) + '\n';
-                    res.write(sanitizedEvent);
-                }
+                if (ui) writeUI(ui);
+                if (card && !capturedCard) capturedCard = card;
+                continue;  // DO NOT also write the raw delta event
 
             } else if (eventType === 'response.created' || eventType === 'response.started') {
                 // Created/Started events: forward as-is
@@ -310,16 +316,26 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                 if (eventData) res.write(eventData);
 
             } else if (eventType === 'response.completed' || eventType === 'response.done') {
-                // Completed events: forward metadata only (no text fields)
-                const eventData = formatResponseEventForFrontend(event);
+                // Never forward model text from completed; sanitize if present
+                const safe = { ...event };
+                if (safe.response?.output_text) {
+                    safe.response.output_text.delta = "";
+                    safe.response.output_text.text = "";
+                    safe.response.output_text.final = "";
+                }
+                const eventData = formatResponseEventForFrontend(safe);
                 if (eventData) res.write(eventData);
 
             } else {
-                // Other events: forward as-is
+                // Forward non-text events as-is
                 const eventData = formatResponseEventForFrontend(event);
                 if (eventData) res.write(eventData);
             }
         }
+
+        // Flush leftover UI tail after stream ends
+        const tail = filter.flush();
+        if (tail.ui) writeUI(tail.ui);
 
     } catch (error) {
         console.error("Error in sendMessage:", error);
@@ -383,7 +399,7 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                     }
                 }
 
-                // Final safety scrub before database storage
+                // Final safety scrub before database storage (paranoia-level)
                 assistantMessageClean = assistantMessageClean.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>\s*$/g, '');
 
                 // Generate outline for next turn from clean text
@@ -530,6 +546,27 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
     let assistantMessageClean = "";
     let capturedCard = null;
 
+    // Create stateful filter for this request
+    const filter = createMemoryCardFilter();
+
+    // Helper function to write sanitized UI and accumulate clean text
+    const writeUI = (ui) => {
+        if (!ui) return;
+        // Optional guard to detect any leaks
+        if (/<MEMORY_CARD>/.test(ui)) {
+            console.error("SANITIZER FAIL: tag reached UI chunk");
+        }
+        const sanitizedEvent = JSON.stringify({
+            event: 'content.delta',
+            data: {
+                id: 'response',
+                text: ui
+            }
+        }) + '\n';
+        res.write(sanitizedEvent);
+        assistantMessageClean += ui;
+    };
+
     try {
         // Create chat with first message using Responses API (conversation)
         const { chat, conversation_id, isReusedChat } = await createChatWithFirstMessage(user, message, instruction_token);
@@ -654,33 +691,17 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
                 isFirstEvent = false;
             }
 
-            // Process events by type - handle sanitization BEFORE sending to UI
+            // Process events by type with stateful filtering
             const eventType = event.type || event.event;
 
             if (eventType === 'response.output_text.delta' || eventType === 'output_text.delta' || eventType === 'content.delta') {
-                // Delta events: sanitize first, then send to UI
-                const rawText = event.delta || event.text || event.content || '';
-                const { cleanText, cardContent } = stripMemoryCard(rawText);
+                // Delta events: process through stateful filter
+                const rawText = getTextDelta(event);
+                const { ui, card } = filter.feed(rawText);
 
-                // Accumulate clean text for database storage
-                assistantMessageClean += cleanText;
-
-                // Capture MEMORY_CARD if found
-                if (cardContent && !capturedCard) {
-                    capturedCard = cardContent;
-                }
-
-                // Send ONLY sanitized text to frontend
-                if (cleanText) {
-                    const sanitizedEvent = JSON.stringify({
-                        event: 'content.delta',
-                        data: {
-                            id: event.response?.id || event.id || 'response',
-                            text: cleanText
-                        }
-                    }) + '\n';
-                    res.write(sanitizedEvent);
-                }
+                if (ui) writeUI(ui);
+                if (card && !capturedCard) capturedCard = card;
+                continue;  // DO NOT also write the raw delta event
 
             } else if (eventType === 'response.created' || eventType === 'response.started') {
                 // Created/Started events: forward as-is
@@ -689,16 +710,26 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
                 if (eventData) res.write(eventData);
 
             } else if (eventType === 'response.completed' || eventType === 'response.done') {
-                // Completed events: forward metadata only (no text fields)
-                const eventData = formatResponseEventForFrontend(event);
+                // Never forward model text from completed; sanitize if present
+                const safe = { ...event };
+                if (safe.response?.output_text) {
+                    safe.response.output_text.delta = "";
+                    safe.response.output_text.text = "";
+                    safe.response.output_text.final = "";
+                }
+                const eventData = formatResponseEventForFrontend(safe);
                 if (eventData) res.write(eventData);
 
             } else {
-                // Other events: forward as-is
+                // Forward non-text events as-is
                 const eventData = formatResponseEventForFrontend(event);
                 if (eventData) res.write(eventData);
             }
         }
+
+        // Flush leftover UI tail after stream ends
+        const tail = filter.flush();
+        if (tail.ui) writeUI(tail.ui);
 
     } catch (error) {
         console.error("Error in sendFirstMessage:", error);
@@ -768,7 +799,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
                     await saveBrief(chatId, user.id, initialBrief);
                 }
 
-                // Final safety scrub before database storage
+                // Final safety scrub before database storage (paranoia-level)
                 assistantMessageClean = assistantMessageClean.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>\s*$/g, '');
 
                 // Generate outline for next turn from clean text
