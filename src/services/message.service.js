@@ -275,29 +275,49 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                 isFirstEvent = false;
             }
 
-            // Forward Responses API events directly to frontend
-            const eventData = formatResponseEventForFrontend(event);
-            
-            if (eventData) {
-                res.write(eventData);
-                
-                // Accumulate data for database storage
-                const eventType = event.type || event.event;
-                if (eventType === 'response.output_text.delta' || eventType === 'output_text.delta' || eventType === 'content.delta') {
-                    const rawText = event.delta || event.text || event.content || '';
-                    const { cleanText, cardContent } = stripMemoryCard(rawText);
-                    assistantMessageClean += cleanText;
+            // Process events by type - handle sanitization BEFORE sending to UI
+            const eventType = event.type || event.event;
 
-                    // Capture MEMORY_CARD if found
-                    if (cardContent && !capturedCard) {
-                        capturedCard = cardContent;
-                    }
-                } else if (eventType === 'response.created' || eventType === 'response.started') {
-                    responseId = event.response?.id || event.id;
-                } else if (eventType === 'response.completed' || eventType === 'response.done') {
-                    // Response completed - NO TEXT PROCESSING to prevent MEMORY_CARD leak
-                    // All text accumulation happens via deltas only
+            if (eventType === 'response.output_text.delta' || eventType === 'output_text.delta' || eventType === 'content.delta') {
+                // Delta events: sanitize first, then send to UI
+                const rawText = event.delta || event.text || event.content || '';
+                const { cleanText, cardContent } = stripMemoryCard(rawText);
+
+                // Accumulate clean text for database storage
+                assistantMessageClean += cleanText;
+
+                // Capture MEMORY_CARD if found
+                if (cardContent && !capturedCard) {
+                    capturedCard = cardContent;
                 }
+
+                // Send ONLY sanitized text to frontend
+                if (cleanText) {
+                    const sanitizedEvent = JSON.stringify({
+                        event: 'content.delta',
+                        data: {
+                            id: event.response?.id || event.id || 'response',
+                            text: cleanText
+                        }
+                    }) + '\n';
+                    res.write(sanitizedEvent);
+                }
+
+            } else if (eventType === 'response.created' || eventType === 'response.started') {
+                // Created/Started events: forward as-is
+                responseId = event.response?.id || event.id;
+                const eventData = formatResponseEventForFrontend(event);
+                if (eventData) res.write(eventData);
+
+            } else if (eventType === 'response.completed' || eventType === 'response.done') {
+                // Completed events: forward metadata only (no text fields)
+                const eventData = formatResponseEventForFrontend(event);
+                if (eventData) res.write(eventData);
+
+            } else {
+                // Other events: forward as-is
+                const eventData = formatResponseEventForFrontend(event);
+                if (eventData) res.write(eventData);
             }
         }
 
@@ -634,29 +654,49 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
                 isFirstEvent = false;
             }
 
-            // Forward Responses API events directly to frontend
-            const eventData = formatResponseEventForFrontend(event);
-            
-            if (eventData) {
-                res.write(eventData);
-                
-                // Accumulate data for database storage
-                const eventType = event.type || event.event;
-                if (eventType === 'response.output_text.delta' || eventType === 'output_text.delta' || eventType === 'content.delta') {
-                    const rawText = event.delta || event.text || event.content || '';
-                    const { cleanText, cardContent } = stripMemoryCard(rawText);
-                    assistantMessageClean += cleanText;
+            // Process events by type - handle sanitization BEFORE sending to UI
+            const eventType = event.type || event.event;
 
-                    // Capture MEMORY_CARD if found
-                    if (cardContent && !capturedCard) {
-                        capturedCard = cardContent;
-                    }
-                } else if (eventType === 'response.created' || eventType === 'response.started') {
-                    responseId = event.response?.id || event.id;
-                } else if (eventType === 'response.completed' || eventType === 'response.done') {
-                    // Response completed - NO TEXT PROCESSING to prevent MEMORY_CARD leak
-                    // All text accumulation happens via deltas only
+            if (eventType === 'response.output_text.delta' || eventType === 'output_text.delta' || eventType === 'content.delta') {
+                // Delta events: sanitize first, then send to UI
+                const rawText = event.delta || event.text || event.content || '';
+                const { cleanText, cardContent } = stripMemoryCard(rawText);
+
+                // Accumulate clean text for database storage
+                assistantMessageClean += cleanText;
+
+                // Capture MEMORY_CARD if found
+                if (cardContent && !capturedCard) {
+                    capturedCard = cardContent;
                 }
+
+                // Send ONLY sanitized text to frontend
+                if (cleanText) {
+                    const sanitizedEvent = JSON.stringify({
+                        event: 'content.delta',
+                        data: {
+                            id: event.response?.id || event.id || 'response',
+                            text: cleanText
+                        }
+                    }) + '\n';
+                    res.write(sanitizedEvent);
+                }
+
+            } else if (eventType === 'response.created' || eventType === 'response.started') {
+                // Created/Started events: forward as-is
+                responseId = event.response?.id || event.id;
+                const eventData = formatResponseEventForFrontend(event);
+                if (eventData) res.write(eventData);
+
+            } else if (eventType === 'response.completed' || eventType === 'response.done') {
+                // Completed events: forward metadata only (no text fields)
+                const eventData = formatResponseEventForFrontend(event);
+                if (eventData) res.write(eventData);
+
+            } else {
+                // Other events: forward as-is
+                const eventData = formatResponseEventForFrontend(event);
+                if (eventData) res.write(eventData);
             }
         }
 
