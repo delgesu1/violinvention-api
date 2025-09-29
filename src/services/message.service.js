@@ -6,6 +6,12 @@ const { createChatWithFirstMessage } = require('./chat.service');
 const { getBrief, saveBrief, updateBrief, toWire, generateOutline, approxTokens } = require('./brief.service');
 
 
+// Helper function to strip MEMORY_CARD content from text
+const stripMemoryCard = (text) => {
+    if (!text || typeof text !== 'string') return text;
+    return text.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>/g, '');
+};
+
 // Format Responses API streaming events for frontend compatibility
 const formatResponseEventForFrontend = (responseEvent) => {
     // Debug logging removed - was causing excessive console output
@@ -19,12 +25,14 @@ const formatResponseEventForFrontend = (responseEvent) => {
         case 'response.output_text.delta':
         case 'output_text.delta':
         case 'content.delta':
-            // Map content delta to expected format
+            // Map content delta to expected format with MEMORY_CARD filtering
+            const rawText = responseEvent.delta || responseEvent.text || responseEvent.content || '';
+            const filteredText = stripMemoryCard(rawText);
             return JSON.stringify({
                 event: 'content.delta',
                 data: {
                     id: responseEvent.response?.id || responseEvent.id || 'response',
-                    text: responseEvent.delta || responseEvent.text || responseEvent.content || ''
+                    text: filteredText
                 }
             }) + '\n';
 
@@ -347,7 +355,7 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                         await saveBrief(chat_id, user.id, updatedBrief);
                         console.log('[Brief Updated] New token count:', approxTokens(toWire(updatedBrief)));
 
-                        // Remove MEMORY_CARD from displayed message
+                        // Remove MEMORY_CARD from message before database storage
                         assistantMessage = assistantMessage.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>/, '').trim();
                     } catch (parseError) {
                         console.error('[MEMORY_CARD] Parse error, keeping previous brief:', parseError);
@@ -486,6 +494,16 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
     res.on("close", handleAbort);
     res.on("error", (err) => console.error("Response error:", err));
 
+    // Initialize brief for first message (will be populated after response)
+    const initialBrief = {
+        goal: "",
+        constraints: [],
+        decisions: [],
+        open_q: [],
+        techniques: [],
+        lesson_context: lesson_context?.type || ""
+    };
+
     try {
         // Create chat with first message using Responses API (conversation)
         const { chat, conversation_id, isReusedChat } = await createChatWithFirstMessage(user, message, instruction_token);
@@ -565,16 +583,6 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
         if (msgError) {
             throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, `Failed to save user message: ${msgError.message}`);
         }
-
-        // Initialize brief for first message (will be populated after response)
-        const initialBrief = {
-            goal: "",
-            constraints: [],
-            decisions: [],
-            open_q: [],
-            techniques: [],
-            lesson_context: lesson_context?.type || ""
-        };
 
         // Build input with MEMORY_INSTRUCTION for first message
         const contextualInput = [
@@ -710,7 +718,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
                         await saveBrief(chatId, user.id, updatedBrief);
                         console.log('[First Message] Brief created with token count:', approxTokens(toWire(updatedBrief)));
 
-                        // Remove MEMORY_CARD from displayed message
+                        // Remove MEMORY_CARD from message before database storage
                         assistantMessage = assistantMessage.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>/, '').trim();
                     } catch (parseError) {
                         console.error('[MEMORY_CARD] Parse error on first message, saving default brief:', parseError);
