@@ -6,10 +6,15 @@ const { createChatWithFirstMessage } = require('./chat.service');
 const { getBrief, saveBrief, updateBrief, toWire, generateOutline, approxTokens } = require('./brief.service');
 
 
-// Helper function to strip MEMORY_CARD content from text
+// Helper function to strip MEMORY_CARD content from text and capture card data
 const stripMemoryCard = (text) => {
-    if (!text || typeof text !== 'string') return text;
-    return text.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>/g, '');
+    if (!text || typeof text !== 'string') return { cleanText: text, cardContent: null };
+
+    const match = text.match(/<MEMORY_CARD>([\s\S]*?)<\/MEMORY_CARD>/);
+    const cleanText = text.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>/g, '');
+    const cardContent = match ? match[1].trim() : null;
+
+    return { cleanText, cardContent };
 };
 
 // Format Responses API streaming events for frontend compatibility
@@ -27,12 +32,12 @@ const formatResponseEventForFrontend = (responseEvent) => {
         case 'content.delta':
             // Map content delta to expected format with MEMORY_CARD filtering
             const rawText = responseEvent.delta || responseEvent.text || responseEvent.content || '';
-            const filteredText = stripMemoryCard(rawText);
+            const { cleanText } = stripMemoryCard(rawText);
             return JSON.stringify({
                 event: 'content.delta',
                 data: {
                     id: responseEvent.response?.id || responseEvent.id || 'response',
-                    text: filteredText
+                    text: cleanText
                 }
             }) + '\n';
 
@@ -130,6 +135,11 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
     res.on("close", handleAbort);
     res.on("error", (err) => console.error("Response error:", err));
 
+    // Hoist variables for scope access in finally block
+    let brief = null;
+    let assistantMessageClean = "";
+    let capturedCard = null;
+
     try {
         const { data: chat, error: chatError } = await supabase
             .from('chats')
@@ -199,7 +209,7 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         // Note: last_message_at and updated_at are handled by frontend when message completes
 
         // LOAD CONVERSATION CONTEXT
-        const brief = await getBrief(chat_id);
+        brief = await getBrief(chat_id);
         const wireBrief = toWire(brief);
 
         // Get last assistant message outline for context
@@ -274,23 +284,19 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                 // Accumulate data for database storage
                 const eventType = event.type || event.event;
                 if (eventType === 'response.output_text.delta' || eventType === 'output_text.delta' || eventType === 'content.delta') {
-                    assistantMessage += event.delta || event.text || event.content || '';
+                    const rawText = event.delta || event.text || event.content || '';
+                    const { cleanText, cardContent } = stripMemoryCard(rawText);
+                    assistantMessageClean += cleanText;
+
+                    // Capture MEMORY_CARD if found
+                    if (cardContent && !capturedCard) {
+                        capturedCard = cardContent;
+                    }
                 } else if (eventType === 'response.created' || eventType === 'response.started') {
                     responseId = event.response?.id || event.id;
                 } else if (eventType === 'response.completed' || eventType === 'response.done') {
-                    // Response completed - we have all the data
-                    if (event.response?.output?.length > 0) {
-                        // Get the full text from completed response if we don't have it
-                        const fullText = event.response.output.map(item => 
-                            item.content?.[0]?.text || item.content || item.text || ''
-                        ).join('');
-                        if (fullText && !assistantMessage) {
-                            assistantMessage = fullText;
-                        }
-                    } else if (event.output_text && !assistantMessage) {
-                        // Use output_text if available
-                        assistantMessage = event.output_text;
-                    }
+                    // Response completed - NO TEXT PROCESSING to prevent MEMORY_CARD leak
+                    // All text accumulation happens via deltas only
                 }
             }
         }
@@ -341,36 +347,34 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         }
     } finally {
         // Save assistant message and update conversation context
-        if (assistantMessage && !abortController.signal.aborted) {
+        if (assistantMessageClean && !abortController.signal.aborted) {
             try {
                 let outline = "";
 
-                // Extract MEMORY_CARD with sentinel parsing (more reliable than regex)
-                const memoryMatch = assistantMessage.match(/<MEMORY_CARD>([\s\S]*?)<\/MEMORY_CARD>/);
-
-                if (memoryMatch) {
+                // Process captured MEMORY_CARD if found
+                if (capturedCard) {
                     try {
-                        const memoryCard = JSON.parse(memoryMatch[1].trim());
+                        const memoryCard = JSON.parse(capturedCard);
                         const updatedBrief = updateBrief(brief, memoryCard);
                         await saveBrief(chat_id, user.id, updatedBrief);
                         console.log('[Brief Updated] New token count:', approxTokens(toWire(updatedBrief)));
-
-                        // Remove MEMORY_CARD from message before database storage
-                        assistantMessage = assistantMessage.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>/, '').trim();
                     } catch (parseError) {
                         console.error('[MEMORY_CARD] Parse error, keeping previous brief:', parseError);
                     }
                 }
 
-                // Generate outline for next turn
-                outline = generateOutline(assistantMessage);
+                // Final safety scrub before database storage
+                assistantMessageClean = assistantMessageClean.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>\s*$/g, '');
+
+                // Generate outline for next turn from clean text
+                outline = generateOutline(assistantMessageClean);
 
                 // Save assistant message with outline
                 const { error: saveError } = await supabase
                     .from('messages')
                     .insert({
                         role: 'assistant',
-                        content: assistantMessage,
+                        content: assistantMessageClean,
                         outline: outline,
                         chat_id,
                         user_id: user.id,
@@ -494,7 +498,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
     res.on("close", handleAbort);
     res.on("error", (err) => console.error("Response error:", err));
 
-    // Initialize brief for first message (will be populated after response)
+    // Initialize brief for first message and hoist variables for finally block access
     const initialBrief = {
         goal: "",
         constraints: [],
@@ -503,6 +507,8 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
         techniques: [],
         lesson_context: lesson_context?.type || ""
     };
+    let assistantMessageClean = "";
+    let capturedCard = null;
 
     try {
         // Create chat with first message using Responses API (conversation)
@@ -637,23 +643,19 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
                 // Accumulate data for database storage
                 const eventType = event.type || event.event;
                 if (eventType === 'response.output_text.delta' || eventType === 'output_text.delta' || eventType === 'content.delta') {
-                    assistantMessage += event.delta || event.text || event.content || '';
+                    const rawText = event.delta || event.text || event.content || '';
+                    const { cleanText, cardContent } = stripMemoryCard(rawText);
+                    assistantMessageClean += cleanText;
+
+                    // Capture MEMORY_CARD if found
+                    if (cardContent && !capturedCard) {
+                        capturedCard = cardContent;
+                    }
                 } else if (eventType === 'response.created' || eventType === 'response.started') {
                     responseId = event.response?.id || event.id;
                 } else if (eventType === 'response.completed' || eventType === 'response.done') {
-                    // Response completed - we have all the data
-                    if (event.response?.output?.length > 0) {
-                        // Get the full text from completed response if we don't have it
-                        const fullText = event.response.output.map(item => 
-                            item.content?.[0]?.text || item.content || item.text || ''
-                        ).join('');
-                        if (fullText && !assistantMessage) {
-                            assistantMessage = fullText;
-                        }
-                    } else if (event.output_text && !assistantMessage) {
-                        // Use output_text if available
-                        assistantMessage = event.output_text;
-                    }
+                    // Response completed - NO TEXT PROCESSING to prevent MEMORY_CARD leak
+                    // All text accumulation happens via deltas only
                 }
             }
         }
@@ -704,22 +706,17 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
         }
     } finally {
         // Save assistant message and initialize conversation context
-        if (assistantMessage && !abortController.signal.aborted) {
+        if (assistantMessageClean && !abortController.signal.aborted) {
             try {
                 let outline = "";
 
-                // Extract MEMORY_CARD for initial brief creation
-                const memoryMatch = assistantMessage.match(/<MEMORY_CARD>([\s\S]*?)<\/MEMORY_CARD>/);
-
-                if (memoryMatch) {
+                // Process captured MEMORY_CARD for initial brief creation
+                if (capturedCard) {
                     try {
-                        const memoryCard = JSON.parse(memoryMatch[1].trim());
+                        const memoryCard = JSON.parse(capturedCard);
                         const updatedBrief = updateBrief(initialBrief, memoryCard);
                         await saveBrief(chatId, user.id, updatedBrief);
                         console.log('[First Message] Brief created with token count:', approxTokens(toWire(updatedBrief)));
-
-                        // Remove MEMORY_CARD from message before database storage
-                        assistantMessage = assistantMessage.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>/, '').trim();
                     } catch (parseError) {
                         console.error('[MEMORY_CARD] Parse error on first message, saving default brief:', parseError);
                         // Save default brief even if parsing fails
@@ -731,15 +728,18 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
                     await saveBrief(chatId, user.id, initialBrief);
                 }
 
-                // Generate outline for next turn
-                outline = generateOutline(assistantMessage);
+                // Final safety scrub before database storage
+                assistantMessageClean = assistantMessageClean.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>\s*$/g, '');
+
+                // Generate outline for next turn from clean text
+                outline = generateOutline(assistantMessageClean);
 
                 // Save assistant message with outline and mark as initial
                 const { error: saveError } = await supabase
                     .from('messages')
                     .insert({
                         role: 'assistant',
-                        content: assistantMessage,
+                        content: assistantMessageClean,
                         outline: outline,
                         is_initial: true, // Mark first assistant response
                         chat_id: chatId,
