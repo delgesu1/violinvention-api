@@ -4,7 +4,7 @@
 -- Step 1: Add columns to messages table
 ALTER TABLE messages
 ADD COLUMN outline TEXT,                    -- 100-token outline of assistant responses
-ADD COLUMN is_initial BOOLEAN DEFAULT FALSE; -- Mark initial responses for key points
+ADD COLUMN is_initial BOOLEAN NOT NULL DEFAULT FALSE; -- Mark initial responses for key points
 
 -- Step 2: Create conversation_briefs table
 CREATE TABLE conversation_briefs (
@@ -15,17 +15,16 @@ CREATE TABLE conversation_briefs (
   token_count INTEGER,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(chat_id)
+  UNIQUE(chat_id),
+  CONSTRAINT brief_is_object CHECK (jsonb_typeof(brief) = 'object')
 );
 
--- Step 3: Add check constraint for user_id (following same pattern as messages table)
-ALTER TABLE conversation_briefs
-ADD CONSTRAINT conversation_briefs_user_id_check CHECK (user_id IS NOT NULL);
-
--- Step 4: Create index for performance
+-- Step 3: Create indexes for performance
 CREATE INDEX idx_briefs_chat ON conversation_briefs(chat_id);
+CREATE INDEX idx_messages_chat_role_created_at ON messages (chat_id, created_at DESC)
+  WHERE role = 'assistant';
 
--- Step 5: Create trigger using Supabase's built-in function (if available)
+-- Step 4: Create trigger using Supabase's built-in function (if available)
 -- Note: Supabase may have update_updated_at_column() function available
 -- If not available, the custom function below will be used as fallback
 DO $$
@@ -51,7 +50,7 @@ BEGIN
   END IF;
 END $$;
 
--- Step 6: Add comments for documentation
+-- Step 5: Add comments for documentation
 COMMENT ON TABLE conversation_briefs IS 'Stores conversation context briefs for memory management';
 COMMENT ON COLUMN conversation_briefs.brief IS 'JSON object containing goal, decisions, techniques, etc.';
 COMMENT ON COLUMN conversation_briefs.token_count IS 'Approximate token count of the brief';
