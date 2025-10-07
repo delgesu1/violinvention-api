@@ -5,6 +5,7 @@ const httpStatus = require('http-status');
 const { createChatWithFirstMessage } = require('./chat.service');
 const { getBrief, saveBrief, updateBrief, toWire, generateOutline, approxTokens, isContentfulOutline } = require('./brief.service');
 const { createMemoryCardFilter } = require('./memoryCardFilter');
+const { searchVectorStore } = require('./vectorStore.service');
 
 // Helper function to extract text from various event shapes
 const getTextDelta = (ev) => {
@@ -265,30 +266,74 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         const useRecent = isContentfulOutline(recentOutline);
         const outlinesDiffer = initialOutline !== recentOutline;
 
-        // BUILD INPUT WITH CONVERSATION CONTEXT
-        const outlineContext = [];
+        // SEARCH VECTOR STORE for relevant lesson history
+        let vectorStoreContext = '';
+        try {
+            const searchResults = await searchVectorStore(user.id, userMessageContent, 3);
 
-        // Include initial outline if contentful
-        if (useInitial && outlinesDiffer) {
-            outlineContext.push(`Initial response outline: ${initialOutline}`);
+            if (searchResults && searchResults.length > 0) {
+                vectorStoreContext = '=== RELEVANT LESSON HISTORY ===\n';
+
+                searchResults.forEach((result, index) => {
+                    const attrs = result.attributes || {};
+                    vectorStoreContext += `\nLesson ${index + 1} (${attrs.date || 'Unknown'}):\n`;
+                    vectorStoreContext += `Title: ${attrs.title || 'Unknown'}\n`;
+                    if (attrs.student_name) {
+                        vectorStoreContext += `Student: ${attrs.student_name}\n`;
+                    }
+                    // Include the content from the search result
+                    const contentText = result.content?.[0]?.text || '';
+                    if (contentText) {
+                        vectorStoreContext += `\n${contentText}\n`;
+                    }
+                    vectorStoreContext += '\n---\n';
+                });
+
+                vectorStoreContext += '=== END LESSON HISTORY ===\n\n';
+                console.log('[VectorStore] Added context from', searchResults.length, 'lessons');
+            } else {
+                console.log('[VectorStore] No relevant lessons found');
+            }
+        } catch (error) {
+            console.error('[VectorStore] Search failed (non-critical):', error.message);
+            vectorStoreContext = '';
         }
 
-        // Include recent outline if contentful or if no initial outline
+        // BUILD INPUT WITH CONVERSATION CONTEXT
+        // Build segments array: brief → vector store → outlines → user message → instruction
+        const segments = [];
+
+        // 1. Add conversation brief (if exists)
+        if (wireBrief) {
+            segments.push(`Conversation context: ${wireBrief}`);
+        }
+
+        // 2. Add vector store context (NEW - inserted here)
+        if (vectorStoreContext) {
+            segments.push(vectorStoreContext);
+        }
+
+        // 3. Add initial outline if contentful
+        if (useInitial && outlinesDiffer) {
+            segments.push(`Initial response outline: ${initialOutline}`);
+        }
+
+        // 4. Add recent outline if contentful or if no initial outline
         if (useRecent && (outlinesDiffer || !useInitial)) {
-            outlineContext.push(`Previous response outline: ${recentOutline}`);
+            segments.push(`Previous response outline: ${recentOutline}`);
         } else if (!useRecent && !useInitial && recentOutline) {
             // Fallback to recent even if not contentful if we have nothing else
-            outlineContext.push(`Previous response outline: ${recentOutline}`);
+            segments.push(`Previous response outline: ${recentOutline}`);
         }
 
-        const contextualInput = [
-            wireBrief && `Conversation context: ${wireBrief}`,
-            ...outlineContext,
-            userMessageContent,
-            MEMORY_INSTRUCTION
-        ].filter(Boolean).join('\n\n');
+        // 5. Add user message and memory instruction
+        segments.push(userMessageContent);
+        segments.push(MEMORY_INSTRUCTION);
+
+        const contextualInput = segments.filter(Boolean).join('\n\n');
 
         console.log('[Conversation Context] Brief tokens:', approxTokens(wireBrief));
+        console.log('[Conversation Context] Vector store tokens:', approxTokens(vectorStoreContext));
         console.log('[Conversation Context] Initial outline tokens:', approxTokens(initialOutline));
         console.log('[Conversation Context] Recent outline tokens:', approxTokens(recentOutline));
         console.log('[Conversation Context] Using initial:', useInitial, 'Using recent:', useRecent);

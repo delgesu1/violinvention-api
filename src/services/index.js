@@ -6,3 +6,4 @@
 // Active services
 module.exports.messageService = require('./message.service');
 module.exports.chatService = require('./chat.service');
+module.exports.vectorStoreService = require('./vectorStore.service');
