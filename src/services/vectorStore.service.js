@@ -202,9 +202,31 @@ const deleteLessonFromVectorStore = async (userId, vectorStoreFileId, openaiFile
   let vectorStoreDeletionSuccess = false;
   let openaiFileDeletionSuccess = false;
 
+  // Prepare headers for manual REST calls (needed because SDK lacks delete helpers)
+  const openAiHeaders = {
+    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+    'Content-Type': 'application/json',
+  };
+
+  if (process.env.OPENAI_PROJECT_ID) {
+    openAiHeaders['OpenAI-Project'] = process.env.OPENAI_PROJECT_ID;
+  }
+
   // Step 1: Remove file from vector store
   try {
-    await openaiClient.vectorStores.files.del(vectorStoreId, vectorStoreFileId);
+    const response = await fetch(
+      `https://api.openai.com/v1/vector_stores/${vectorStoreId}/files/${vectorStoreFileId}`,
+      {
+        method: 'DELETE',
+        headers: openAiHeaders,
+      }
+    );
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`HTTP ${response.status} ${response.statusText} - ${errorBody}`);
+    }
+
     console.log(`[VectorStore] Removed file ${vectorStoreFileId} from vector store ${vectorStoreId}`);
     vectorStoreDeletionSuccess = true;
   } catch (error) {
@@ -214,7 +236,19 @@ const deleteLessonFromVectorStore = async (userId, vectorStoreFileId, openaiFile
 
   // Step 2: Delete underlying OpenAI file (critical for preventing orphaned files)
   try {
-    await openaiClient.files.del(openaiFileId);
+    const response = await fetch(
+      `https://api.openai.com/v1/files/${openaiFileId}`,
+      {
+        method: 'DELETE',
+        headers: openAiHeaders,
+      }
+    );
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`HTTP ${response.status} ${response.statusText} - ${errorBody}`);
+    }
+
     console.log(`[VectorStore] Deleted OpenAI file ${openaiFileId}`);
     openaiFileDeletionSuccess = true;
   } catch (error) {
