@@ -1,6 +1,22 @@
 const allRoles = {
-  user: ['sendMessage', 'getMessages', 'manageChats'],
-  admin: ['sendMessage', 'getMessages', 'manageChats', 'getUsers', 'manageUsers'],
+  user: [
+    'sendMessage',
+    'getMessages',
+    'manageChats',
+    'uploadLesson',
+    'deleteLesson',
+    'searchVectorStore',
+  ],
+  admin: [
+    'sendMessage',
+    'getMessages',
+    'manageChats',
+    'uploadLesson',
+    'deleteLesson',
+    'searchVectorStore',
+    'getUsers',
+    'manageUsers',
+  ],
 };
 
 const roles = Object.keys(allRoles);
