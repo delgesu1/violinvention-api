@@ -1,3 +1,4 @@
+const OpenAI = require('openai');
 const { openaiClient } = require('../config/openai');
 const { supabase } = require('../config/supabase');
 const ApiError = require('../utils/ApiError');
@@ -145,7 +146,7 @@ ${transcript}`;
 
   // Step 1: Upload file to OpenAI Files API (using Buffer for Node.js compatibility)
   const file = await openaiClient.files.create({
-    file: await openaiClient.toFile(
+    file: await OpenAI.toFile(
       Buffer.from(combinedContent, 'utf-8'),
       `lesson_${metadata.lesson_id}.txt`
     ),
