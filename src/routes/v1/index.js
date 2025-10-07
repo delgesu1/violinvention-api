@@ -5,6 +5,7 @@ const express = require('express');
 const chatRoute = require('./chat.route');
 const messageRoute = require('./message.route');
 const pdfRoute = require('./pdf.route');
+const vectorStoreRoute = require('./vectorStore.route');
 const healthRoute = require('./health.route');
 const docsRoute = require('./docs.route');
 const config = require('../../config/config');
@@ -32,6 +33,10 @@ const defaultRoutes = [
   {
     path: '/pdf',
     route: pdfRoute,
+  },
+  {
+    path: '/vector_store',
+    route: vectorStoreRoute,
   },
   {
     path: '/health',
