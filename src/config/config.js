@@ -13,12 +13,14 @@ const envVarsSchema = Joi.object()
     // JWT_ACCESS_EXPIRATION_DAYS: Joi.string().required().description('JWT expiration days'),
     
     OPENAI_API_KEY:Joi.string().required(),
+    OPENAI_PROJECT_ID:Joi.string().optional(), // Required for project-scoped keys (sk-proj-...)
     PROMPT_ID:Joi.string().optional(), // New Responses API
     VECTOR_STORE_ID:Joi.string().optional(), // Vector store for knowledge base
     ASSISTANT_ID:Joi.string().optional(), // Legacy, optional for migration
     OPENAI_API_MODEL:Joi.string().required(),
 
     OPENAI_API_KEY_BOT:Joi.string().optional(),
+    OPENAI_PROJECT_ID_BOT:Joi.string().optional(), // Required for project-scoped keys (sk-proj-...)
     PROMPT_ID_BOT:Joi.string().optional(), // New Responses API for bot
     ASSISTANT_ID_BOT:Joi.string().optional(), // Legacy, optional for migration
     OPENAI_API_MODEL_BOT:Joi.string().optional(),
@@ -43,6 +45,7 @@ module.exports = {
   openai:{
     mainClient:{
       key: envVars.OPENAI_API_KEY,
+      projectId: envVars.OPENAI_PROJECT_ID, // Required for project-scoped keys
       promptId: envVars.PROMPT_ID || 'pmpt_68a813200634819093ee3c75a18916b00f89c46dc51e879f',
       promptVersion: envVars.PROMPT_VERSION || '35',
       vectorStoreId: envVars.VECTOR_STORE_ID || 'vs_rnnqexe2zwkUBkn5NInfTRt4', // Legacy, kept for migration
@@ -51,6 +54,7 @@ module.exports = {
     },
     botClient:{
       key: envVars.OPENAI_API_KEY_BOT || envVars.OPENAI_API_KEY,
+      projectId: envVars.OPENAI_PROJECT_ID_BOT || envVars.OPENAI_PROJECT_ID, // Required for project-scoped keys
       promptId: envVars.PROMPT_ID_BOT || 'pmpt_68ae7e8cdf708193afe84839f885f83f0bde76623c4cf917',
       promptVersion: envVars.PROMPT_VERSION_BOT || '1',
       assistantId: envVars.ASSISTANT_ID_BOT, // Legacy

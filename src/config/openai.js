@@ -19,10 +19,12 @@ const ASSISTANT_ID_BOT = config.openai.botClient.assistantId;
 // Updated for OpenAI SDK 5.x with Responses API
 const openaiClient = new OpenAI({
   apiKey: config.openai.mainClient.key,
+  project: config.openai.mainClient.projectId, // Required for project-scoped keys (sk-proj-...)
 });
 
 const botClient = new OpenAI({
   apiKey: config.openai.botClient.key,
+  project: config.openai.botClient.projectId, // Required for project-scoped keys (sk-proj-...)
 });
 
 module.exports = {
