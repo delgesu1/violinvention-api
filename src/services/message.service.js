@@ -1,11 +1,12 @@
 const { supabase } = require("../config/supabase.js");
-const { openaiClient, PROMPT_ID, PROMPT_VERSION, VECTOR_STORE_ID, PROMPT_ID_PERSONAL_LESSONS, PROMPT_VERSION_PERSONAL_LESSONS, botClient, PROMPT_ID_BOT, PROMPT_VERSION_BOT } = require("../config/openai");
+const { openaiClient, PROMPT_ID, PROMPT_VERSION, PROMPT_INSTRUCTIONS, VECTOR_STORE_ID, PROMPT_ID_PERSONAL_LESSONS, PROMPT_VERSION_PERSONAL_LESSONS, PROMPT_INSTRUCTIONS_PERSONAL_LESSONS, OPENAI_MODEL, botClient, PROMPT_ID_BOT, PROMPT_VERSION_BOT } = require("../config/openai");
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 const { createChatWithFirstMessage } = require('./chat.service');
 const { getBrief, saveBrief, updateBrief, toWire, generateOutline, approxTokens, isContentfulOutline } = require('./brief.service');
 const { createMemoryCardFilter } = require('./memoryCardFilter');
 const { getUserVectorStore } = require('./vectorStore.service');
+const { getPromptMessages } = require('./promptTemplate.service');
 
 // Helper function to extract text from various event shapes
 const getTextDelta = (ev) => {
@@ -304,23 +305,37 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         const chatMode = chat.chat_mode || 'arcoai';
         let promptId = PROMPT_ID;
         let promptVersion = PROMPT_VERSION;
+        let promptInstructions = PROMPT_INSTRUCTIONS;
         let vectorStoreIds;
 
         if (chatMode === 'personal_lessons') {
             const userVectorStoreId = await getUserVectorStore(user.id);
             if (userVectorStoreId) {
                 vectorStoreIds = [userVectorStoreId];
-                promptId = PROMPT_ID_PERSONAL_LESSONS;
-                promptVersion = PROMPT_VERSION_PERSONAL_LESSONS;
                 console.log(`[VectorStore] Using personal lessons store ${userVectorStoreId} for user ${user.id}`);
             } else {
-                promptId = PROMPT_ID_PERSONAL_LESSONS;
-                promptVersion = PROMPT_VERSION_PERSONAL_LESSONS;
                 console.warn(`[VectorStore] User ${user.id} has no personal vector store; proceeding without file_search context`);
             }
-        } else {
+            promptId = PROMPT_ID_PERSONAL_LESSONS;
+            promptVersion = PROMPT_VERSION_PERSONAL_LESSONS;
+            promptInstructions = PROMPT_INSTRUCTIONS_PERSONAL_LESSONS;
+        } else if (VECTOR_STORE_ID) {
             vectorStoreIds = [VECTOR_STORE_ID];
         }
+
+        const promptMessages = await getPromptMessages({
+            promptId,
+            promptVersion,
+            fallbackInstructions: promptInstructions,
+        });
+
+        const inputMessages = [
+            ...promptMessages,
+            {
+                role: 'user',
+                content: [{ type: 'input_text', text: contextualInput }],
+            },
+        ];
 
         console.log('[OpenAI API] About to call with conversation context:', {
             chatMode,
@@ -331,12 +346,13 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         });
 
         const responseOptions = {
-            prompt: {
-                id: promptId,
-                version: promptVersion
-            },
-            input: contextualInput,
+            model: OPENAI_MODEL,
+            input: inputMessages,
             stream: true,
+            store: true,
+            include: ['reasoning.encrypted_content', 'web_search_call.action.sources'],
+            text: { format: { type: 'text' } },
+            reasoning: { effort: 'low', summary: 'auto' },
             ...(lesson_context && {
                 metadata: {
                     lesson_context: JSON.stringify(lesson_context)
@@ -728,6 +744,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
 
         let promptId = PROMPT_ID;
         let promptVersion = PROMPT_VERSION;
+        let promptInstructions = PROMPT_INSTRUCTIONS;
         let vectorStoreIds;
 
         if (chat_mode === 'personal_lessons') {
@@ -740,9 +757,24 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
             }
             promptId = PROMPT_ID_PERSONAL_LESSONS;
             promptVersion = PROMPT_VERSION_PERSONAL_LESSONS;
-        } else {
+            promptInstructions = PROMPT_INSTRUCTIONS_PERSONAL_LESSONS;
+        } else if (VECTOR_STORE_ID) {
             vectorStoreIds = [VECTOR_STORE_ID];
         }
+
+        const promptMessages = await getPromptMessages({
+            promptId,
+            promptVersion,
+            fallbackInstructions: promptInstructions,
+        });
+
+        const inputMessages = [
+            ...promptMessages,
+            {
+                role: 'user',
+                content: [{ type: 'input_text', text: contextualInput }],
+            },
+        ];
 
         console.log('[OpenAI API] About to call with MEMORY instruction (first message):', {
             chatMode: chat_mode,
@@ -753,12 +785,13 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
         });
 
         const responseOptions = {
-            prompt: {
-                id: promptId,
-                version: promptVersion
-            },
-            input: contextualInput,
+            model: OPENAI_MODEL,
+            input: inputMessages,
             stream: true,
+            store: true,
+            include: ['reasoning.encrypted_content', 'web_search_call.action.sources'],
+            text: { format: { type: 'text' } },
+            reasoning: { effort: 'low', summary: 'auto' },
             ...(lesson_context && {
                 metadata: {
                     lesson_context: JSON.stringify(lesson_context)
