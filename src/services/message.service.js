@@ -344,12 +344,6 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
             }
         }
 
-        const promptMessages = await getPromptMessages({
-            promptId,
-            promptVersion,
-            fallbackInstructions: promptInstructions,
-        });
-
         if (retrievalContext) {
             segments.splice(segments.length - 2, 0, retrievalContext);
             contextualInput = segments.filter(Boolean).join('\n\n');
@@ -361,36 +355,72 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         console.log('[Conversation Context] Using initial:', useInitial, 'Using recent:', useRecent);
         console.log('[Conversation Context] Total context tokens:', approxTokens(contextualInput));
 
-        const inputMessages = [
-            ...promptMessages,
-            {
-                role: 'user',
-                content: [{ type: 'input_text', text: contextualInput }],
-            },
-        ];
+        let responseOptions;
 
-        console.log('[OpenAI API] About to call with conversation context:', {
-            chatMode,
-            prompt_id: promptId,
-            version: promptVersion,
-            inputLength: contextualInput.length,
-            retrievalMode: chatMode === 'personal_lessons' ? `manual_lookup:${vectorSearchResults.length}` : 'prompt_bound'
-        });
+        if (chatMode === 'personal_lessons') {
+            const promptMessages = await getPromptMessages({
+                promptId,
+                promptVersion,
+                fallbackInstructions: promptInstructions,
+            });
 
-        const responseOptions = {
-            model: OPENAI_MODEL,
-            input: inputMessages,
-            stream: true,
-            store: true,
-            include: ['reasoning.encrypted_content', 'web_search_call.action.sources'],
-            text: { format: { type: 'text' } },
-            reasoning: { effort: 'low', summary: 'auto' },
-            ...(lesson_context && {
-                metadata: {
-                    lesson_context: JSON.stringify(lesson_context)
-                }
-            })
-        };
+            const inputMessages = [
+                ...promptMessages,
+                {
+                    role: 'user',
+                    content: [{ type: 'input_text', text: contextualInput }],
+                },
+            ];
+
+            console.log('[OpenAI API] About to call with conversation context:', {
+                chatMode,
+                prompt_id: promptId,
+                version: promptVersion,
+                inputLength: contextualInput.length,
+                retrievalMode: `manual_lookup:${vectorSearchResults.length}`
+            });
+
+            responseOptions = {
+                model: OPENAI_MODEL,
+                input: inputMessages,
+                stream: true,
+                store: true,
+                include: ['reasoning.encrypted_content', 'web_search_call.action.sources'],
+                text: { format: { type: 'text' } },
+                reasoning: { effort: 'low', summary: 'auto' },
+                ...(lesson_context && {
+                    metadata: {
+                        lesson_context: JSON.stringify(lesson_context)
+                    }
+                })
+            };
+        } else {
+            console.log('[OpenAI API] About to call with conversation context:', {
+                chatMode,
+                prompt_id: promptId,
+                version: promptVersion,
+                inputLength: contextualInput.length,
+                retrievalMode: 'prompt_reference'
+            });
+
+            responseOptions = {
+                prompt: {
+                    id: promptId,
+                    version: promptVersion
+                },
+                input: contextualInput,
+                stream: true,
+                store: true,
+                include: ['reasoning.encrypted_content', 'web_search_call.action.sources'],
+                text: { format: { type: 'text' } },
+                reasoning: { effort: 'low', summary: 'auto' },
+                ...(lesson_context && {
+                    metadata: {
+                        lesson_context: JSON.stringify(lesson_context)
+                    }
+                })
+            };
+        }
 
         const responseStream = await openaiClient.responses.create(responseOptions);
 
@@ -812,42 +842,72 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
             }
         }
 
-        const promptMessages = await getPromptMessages({
-            promptId,
-            promptVersion,
-            fallbackInstructions: promptInstructions,
-        });
+        let responseOptions;
 
-        const inputMessages = [
-            ...promptMessages,
-            {
-                role: 'user',
-                content: [{ type: 'input_text', text: contextualInput }],
-            },
-        ];
+        if (chat_mode === 'personal_lessons') {
+            const promptMessages = await getPromptMessages({
+                promptId,
+                promptVersion,
+                fallbackInstructions: promptInstructions,
+            });
 
-        console.log('[OpenAI API] About to call with MEMORY instruction (first message):', {
-            chatMode: chat_mode,
-            prompt_id: promptId,
-            version: promptVersion,
-            inputLength: contextualInput.length,
-            retrievalMode: chat_mode === 'personal_lessons' ? `manual_lookup:${vectorSearchResults.length}` : 'prompt_bound'
-        });
+            const inputMessages = [
+                ...promptMessages,
+                {
+                    role: 'user',
+                    content: [{ type: 'input_text', text: contextualInput }],
+                },
+            ];
 
-        const responseOptions = {
-            model: OPENAI_MODEL,
-            input: inputMessages,
-            stream: true,
-            store: true,
-            include: ['reasoning.encrypted_content', 'web_search_call.action.sources'],
-            text: { format: { type: 'text' } },
-            reasoning: { effort: 'low', summary: 'auto' },
-            ...(lesson_context && {
-                metadata: {
-                    lesson_context: JSON.stringify(lesson_context)
-                }
-            })
-        };
+            console.log('[OpenAI API] About to call with MEMORY instruction (first message):', {
+                chatMode: chat_mode,
+                prompt_id: promptId,
+                version: promptVersion,
+                inputLength: contextualInput.length,
+                retrievalMode: `manual_lookup:${vectorSearchResults.length}`
+            });
+
+            responseOptions = {
+                model: OPENAI_MODEL,
+                input: inputMessages,
+                stream: true,
+                store: true,
+                include: ['reasoning.encrypted_content', 'web_search_call.action.sources'],
+                text: { format: { type: 'text' } },
+                reasoning: { effort: 'low', summary: 'auto' },
+                ...(lesson_context && {
+                    metadata: {
+                        lesson_context: JSON.stringify(lesson_context)
+                    }
+                })
+            };
+        } else {
+            console.log('[OpenAI API] About to call with MEMORY instruction (first message):', {
+                chatMode: chat_mode,
+                prompt_id: PROMPT_ID,
+                version: PROMPT_VERSION,
+                inputLength: contextualInput.length,
+                retrievalMode: 'prompt_reference'
+            });
+
+            responseOptions = {
+                prompt: {
+                    id: PROMPT_ID,
+                    version: PROMPT_VERSION
+                },
+                input: contextualInput,
+                stream: true,
+                store: true,
+                include: ['reasoning.encrypted_content', 'web_search_call.action.sources'],
+                text: { format: { type: 'text' } },
+                reasoning: { effort: 'low', summary: 'auto' },
+                ...(lesson_context && {
+                    metadata: {
+                        lesson_context: JSON.stringify(lesson_context)
+                    }
+                })
+            };
+        }
 
         const responseStream = await openaiClient.responses.create(responseOptions);
 
