@@ -1,11 +1,11 @@
 const { supabase } = require("../config/supabase.js");
-const { openaiClient, PROMPT_ID, PROMPT_VERSION, PROMPT_INSTRUCTIONS, VECTOR_STORE_ID, PROMPT_ID_PERSONAL_LESSONS, PROMPT_VERSION_PERSONAL_LESSONS, PROMPT_INSTRUCTIONS_PERSONAL_LESSONS, OPENAI_MODEL, botClient, PROMPT_ID_BOT, PROMPT_VERSION_BOT } = require("../config/openai");
+const { openaiClient, PROMPT_ID, PROMPT_VERSION, PROMPT_INSTRUCTIONS, PROMPT_ID_PERSONAL_LESSONS, PROMPT_VERSION_PERSONAL_LESSONS, PROMPT_INSTRUCTIONS_PERSONAL_LESSONS, OPENAI_MODEL, botClient, PROMPT_ID_BOT, PROMPT_VERSION_BOT } = require("../config/openai");
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 const { createChatWithFirstMessage } = require('./chat.service');
 const { getBrief, saveBrief, updateBrief, toWire, generateOutline, approxTokens, isContentfulOutline } = require('./brief.service');
 const { createMemoryCardFilter } = require('./memoryCardFilter');
-const { getUserVectorStore } = require('./vectorStore.service');
+const { searchVectorStore } = require('./vectorStore.service');
 const { getPromptMessages } = require('./promptTemplate.service');
 
 // Helper function to extract text from various event shapes
@@ -293,34 +293,51 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         segments.push(userMessageContent);
         segments.push(MEMORY_INSTRUCTION);
 
-        const contextualInput = segments.filter(Boolean).join('\n\n');
-
-        console.log('[Conversation Context] Brief tokens:', approxTokens(wireBrief));
-        console.log('[Conversation Context] Initial outline tokens:', approxTokens(initialOutline));
-        console.log('[Conversation Context] Recent outline tokens:', approxTokens(recentOutline));
-        console.log('[Conversation Context] Using initial:', useInitial, 'Using recent:', useRecent);
-        console.log('[Conversation Context] Total context tokens:', approxTokens(contextualInput));
+        let contextualInput = segments.filter(Boolean).join('\n\n');
 
         // Determine chat mode
         const chatMode = chat.chat_mode || 'arcoai';
         let promptId = PROMPT_ID;
         let promptVersion = PROMPT_VERSION;
         let promptInstructions = PROMPT_INSTRUCTIONS;
-        let vectorStoreIds;
+        let vectorSearchResults = [];
+        let retrievalContext = '';
 
         if (chatMode === 'personal_lessons') {
-            const userVectorStoreId = await getUserVectorStore(user.id);
-            if (userVectorStoreId) {
-                vectorStoreIds = [userVectorStoreId];
-                console.log(`[VectorStore] Using personal lessons store ${userVectorStoreId} for user ${user.id}`);
-            } else {
-                console.warn(`[VectorStore] User ${user.id} has no personal vector store; proceeding without file_search context`);
-            }
             promptId = PROMPT_ID_PERSONAL_LESSONS;
             promptVersion = PROMPT_VERSION_PERSONAL_LESSONS;
             promptInstructions = PROMPT_INSTRUCTIONS_PERSONAL_LESSONS;
-        } else if (VECTOR_STORE_ID) {
-            vectorStoreIds = [VECTOR_STORE_ID];
+
+            vectorSearchResults = await searchVectorStore(user.id, userDisplayContent, 5);
+
+            if (vectorSearchResults.length > 0) {
+                const formatted = vectorSearchResults.map((result, index) => {
+                    const attributes = result.attributes || {};
+                    const title = attributes.title || attributes.lesson_title || attributes.name || `Source ${index + 1}`;
+                    const lessonId = attributes.lesson_id || attributes.lessonId;
+                    const date = attributes.date || attributes.lesson_date;
+
+                    const rawContentArray = Array.isArray(result.content) ? result.content : [];
+                    const extractedText = rawContentArray
+                        .map((chunk) => chunk?.text || chunk?.value || '')
+                        .filter(Boolean)
+                        .join('\n');
+
+                    const fallbackText = typeof result.content === 'string' ? result.content : '';
+                    const combinedText = (extractedText || fallbackText || '[No excerpt available]').trim();
+                    const truncatedText = combinedText.length > 600 ? `${combinedText.substring(0, 600)}…` : combinedText;
+
+                    const headerParts = [title];
+                    if (lessonId) headerParts.push(`ID: ${lessonId}`);
+                    if (date) headerParts.push(`Date: ${date}`);
+
+                    return `${headerParts.join(' • ')}\n${truncatedText}`;
+                }).join('\n\n');
+
+                retrievalContext = `Relevant lesson excerpts:\n${formatted}`;
+            } else {
+                console.log(`[VectorStore] No personal lesson matches found for user ${user.id} (chat ${chat_id})`);
+            }
         }
 
         const promptMessages = await getPromptMessages({
@@ -328,6 +345,17 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
             promptVersion,
             fallbackInstructions: promptInstructions,
         });
+
+        if (retrievalContext) {
+            segments.splice(segments.length - 2, 0, retrievalContext);
+            contextualInput = segments.filter(Boolean).join('\n\n');
+        }
+
+        console.log('[Conversation Context] Brief tokens:', approxTokens(wireBrief));
+        console.log('[Conversation Context] Initial outline tokens:', approxTokens(initialOutline));
+        console.log('[Conversation Context] Recent outline tokens:', approxTokens(recentOutline));
+        console.log('[Conversation Context] Using initial:', useInitial, 'Using recent:', useRecent);
+        console.log('[Conversation Context] Total context tokens:', approxTokens(contextualInput));
 
         const inputMessages = [
             ...promptMessages,
@@ -342,7 +370,7 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
             prompt_id: promptId,
             version: promptVersion,
             inputLength: contextualInput.length,
-            hasVectorStore: Array.isArray(vectorStoreIds) && vectorStoreIds.length > 0
+            retrievalMode: chatMode === 'personal_lessons' ? `manual_lookup:${vectorSearchResults.length}` : 'prompt_bound'
         });
 
         const responseOptions = {
@@ -359,15 +387,6 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                 }
             })
         };
-
-        if (Array.isArray(vectorStoreIds) && vectorStoreIds.length > 0) {
-            responseOptions.tool_resources = {
-                file_search: {
-                    vector_store_ids: vectorStoreIds
-                }
-            };
-            responseOptions.tools = [{ type: 'file_search' }];
-        }
 
         const responseStream = await openaiClient.responses.create(responseOptions);
 
@@ -737,29 +756,54 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
         }
 
         // Build input with MEMORY_INSTRUCTION for first message
-        const contextualInput = [
+        const contextualSegments = [
             userMessageContent,
             MEMORY_INSTRUCTION
-        ].join('\n\n');
+        ];
+
+        let contextualInput = contextualSegments.join('\n\n');
 
         let promptId = PROMPT_ID;
         let promptVersion = PROMPT_VERSION;
         let promptInstructions = PROMPT_INSTRUCTIONS;
-        let vectorStoreIds;
+        let vectorSearchResults = [];
 
         if (chat_mode === 'personal_lessons') {
-            const userVectorStoreId = await getUserVectorStore(user.id);
-            if (userVectorStoreId) {
-                vectorStoreIds = [userVectorStoreId];
-                console.log(`[VectorStore] Using personal lessons store ${userVectorStoreId} for user ${user.id}`);
-            } else {
-                console.warn(`[VectorStore] User ${user.id} has no personal vector store; proceeding without file_search context`);
-            }
             promptId = PROMPT_ID_PERSONAL_LESSONS;
             promptVersion = PROMPT_VERSION_PERSONAL_LESSONS;
             promptInstructions = PROMPT_INSTRUCTIONS_PERSONAL_LESSONS;
-        } else if (VECTOR_STORE_ID) {
-            vectorStoreIds = [VECTOR_STORE_ID];
+
+            vectorSearchResults = await searchVectorStore(user.id, userDisplayContent, 5);
+
+            if (vectorSearchResults.length > 0) {
+                const formatted = vectorSearchResults.map((result, index) => {
+                    const attributes = result.attributes || {};
+                    const title = attributes.title || attributes.lesson_title || attributes.name || `Source ${index + 1}`;
+                    const lessonId = attributes.lesson_id || attributes.lessonId;
+                    const date = attributes.date || attributes.lesson_date;
+
+                    const rawContentArray = Array.isArray(result.content) ? result.content : [];
+                    const extractedText = rawContentArray
+                        .map((chunk) => chunk?.text || chunk?.value || '')
+                        .filter(Boolean)
+                        .join('\n');
+
+                    const fallbackText = typeof result.content === 'string' ? result.content : '';
+                    const combinedText = (extractedText || fallbackText || '[No excerpt available]').trim();
+                    const truncatedText = combinedText.length > 600 ? `${combinedText.substring(0, 600)}…` : combinedText;
+
+                    const headerParts = [title];
+                    if (lessonId) headerParts.push(`ID: ${lessonId}`);
+                    if (date) headerParts.push(`Date: ${date}`);
+
+                    return `${headerParts.join(' • ')}\n${truncatedText}`;
+                }).join('\n\n');
+
+                contextualSegments.splice(1, 0, `Relevant lesson excerpts:\n${formatted}`);
+                contextualInput = contextualSegments.join('\n\n');
+            } else {
+                console.log(`[VectorStore] No personal lesson matches found for user ${user.id} (new chat ${chatId})`);
+            }
         }
 
         const promptMessages = await getPromptMessages({
@@ -781,7 +825,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
             prompt_id: promptId,
             version: promptVersion,
             inputLength: contextualInput.length,
-            hasVectorStore: Array.isArray(vectorStoreIds) && vectorStoreIds.length > 0
+            retrievalMode: chat_mode === 'personal_lessons' ? `manual_lookup:${vectorSearchResults.length}` : 'prompt_bound'
         });
 
         const responseOptions = {
@@ -798,15 +842,6 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                 }
             })
         };
-
-        if (Array.isArray(vectorStoreIds) && vectorStoreIds.length > 0) {
-            responseOptions.tool_resources = {
-                file_search: {
-                    vector_store_ids: vectorStoreIds
-                }
-            };
-            responseOptions.tools = [{ type: 'file_search' }];
-        }
 
         const responseStream = await openaiClient.responses.create(responseOptions);
 
