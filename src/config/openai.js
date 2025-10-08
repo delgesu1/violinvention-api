@@ -6,6 +6,8 @@ const PROMPT_ID = config.openai.mainClient.promptId;
 const PROMPT_VERSION = config.openai.mainClient.promptVersion;
 const VECTOR_STORE_ID = config.openai.mainClient.vectorStoreId; // Legacy, kept for migration
 const OPENAI_MODEL = config.openai.mainClient.model;
+const PROMPT_ID_PERSONAL_LESSONS = config.openai.mainClient.personalLessonsPromptId;
+const PROMPT_VERSION_PERSONAL_LESSONS = config.openai.mainClient.personalLessonsPromptVersion;
 
 // Legacy Assistants API configuration (kept for backward compatibility)
 const ASSISTANT_ID = config.openai.mainClient.assistantId;
@@ -32,6 +34,8 @@ module.exports = {
   PROMPT_ID,
   PROMPT_VERSION,
   VECTOR_STORE_ID, // Legacy, kept for migration
+  PROMPT_ID_PERSONAL_LESSONS,
+  PROMPT_VERSION_PERSONAL_LESSONS,
   openaiClient,
   
   // Bot configuration

@@ -1,19 +1,21 @@
-const { openaiClient, PROMPT_ID, PROMPT_VERSION } = require("../config/openai.js");
+const { PROMPT_ID, PROMPT_ID_PERSONAL_LESSONS } = require("../config/openai.js");
 const { supabase } = require("../config/supabase.js");
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 
-const createChat = async (user, title = null) => {
+const createChat = async (user, title = null, chatMode = 'arcoai') => {
     // Generate conversation ID locally - conversations are created implicitly in Responses API
     const { v4: uuidv4 } = require('uuid');
     const conversationId = uuidv4();
+    const promptId = chatMode === 'personal_lessons' ? PROMPT_ID_PERSONAL_LESSONS : PROMPT_ID;
     
     const { data: chatData, error } = await supabase
         .from('chats')
         .insert({
             conversation_id: conversationId,
             thread_id: conversationId, // Keep for backward compatibility during migration
-            prompt_id: PROMPT_ID,
+            prompt_id: promptId,
+            chat_mode: chatMode,
             user_id: user.id,
             title: title || "New Chat",
         })
@@ -31,7 +33,7 @@ const createChat = async (user, title = null) => {
     return chat;
 };
 
-const updateChat = async (user, chat_id, title) => {
+const updateChat = async (user, chat_id, updates = {}) => {
     const { data: chatData, error: fetchError } = await supabase
         .from('chats')
         .select('*')
@@ -43,9 +45,31 @@ const updateChat = async (user, chat_id, title) => {
         throw new ApiError(httpStatus.BAD_REQUEST, "Invalid Chat!");
     }
 
+    const updatePayload = {};
+    if (Object.prototype.hasOwnProperty.call(updates, 'title')) {
+        updatePayload.title = updates.title;
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'chat_mode')) {
+        const chatMode = updates.chat_mode;
+        if (!['arcoai', 'personal_lessons'].includes(chatMode)) {
+            throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid chat mode. Must be arcoai or personal_lessons');
+        }
+        updatePayload.chat_mode = chatMode;
+        updatePayload.prompt_id = chatMode === 'personal_lessons' ? PROMPT_ID_PERSONAL_LESSONS : PROMPT_ID;
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+        const sanitizedChat = { ...chatData };
+        delete sanitizedChat.thread_id;
+        delete sanitizedChat.conversation_id;
+        return sanitizedChat;
+    }
+
+    updatePayload.updated_at = new Date().toISOString();
+
     const { data: updatedChat, error: updateError } = await supabase
         .from('chats')
-        .update({ title })
+        .update(updatePayload)
         .eq('chat_id', chat_id)
         .eq('user_id', user.id)
         .select()
@@ -130,7 +154,7 @@ const deleteChat = async (user, chat_id) => {
  * @param {string} instruction_token - Optional instruction token to append
  * @returns {Object} Chat creation result with conversation_id and isReusedChat flag
  */
-const createChatWithFirstMessage = async (user, message, instruction_token = '') => {
+const createChatWithFirstMessage = async (user, message, instruction_token = '', chat_mode = 'arcoai') => {
     try {
         // Extract clean message without instruction token for title generation
         let cleanMessage = message;
@@ -157,7 +181,7 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '')
                 throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid prep digest message: missing student name');
             }
             
-            const existingChat = await findPrepDigestChat(user, studentName);
+            let existingChat = await findPrepDigestChat(user, studentName);
             
             if (existingChat) {
                 // Reuse existing prep digest chat
@@ -167,16 +191,25 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '')
                 // Note: This is safe to do repeatedly - if no messages exist, the operation is a no-op
                 await clearChatMessages(existingChat.chat_id, user.id);
                 
-                // Update the chat's updated_at timestamp to move it to the top of the chat list
-                const { error: timestampError } = await supabase
+                const updateFields = { updated_at: new Date().toISOString() };
+                if (chat_mode && ['arcoai', 'personal_lessons'].includes(chat_mode) && chat_mode !== existingChat.chat_mode) {
+                    updateFields.chat_mode = chat_mode;
+                    updateFields.prompt_id = chat_mode === 'personal_lessons' ? PROMPT_ID_PERSONAL_LESSONS : PROMPT_ID;
+                }
+
+                const { data: updatedPrepChat, error: timestampError } = await supabase
                     .from('chats')
-                    .update({ updated_at: new Date().toISOString() })
+                    .update(updateFields)
                     .eq('chat_id', existingChat.chat_id)
-                    .eq('user_id', user.id);
+                    .eq('user_id', user.id)
+                    .select()
+                    .single();
                 
                 if (timestampError) {
                     console.error('Error updating timestamp for reused prep chat:', timestampError);
                     // Continue anyway - the reuse will still work, just won't move to top
+                } else if (updatedPrepChat) {
+                    existingChat = updatedPrepChat;
                 }
                 
                 // Ensure conversation_id exists (for legacy chats)
@@ -235,12 +268,15 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '')
         const conversationId = uuidv4();
         
         // Create chat in database
+        const promptId = chat_mode === 'personal_lessons' ? PROMPT_ID_PERSONAL_LESSONS : PROMPT_ID;
+
         const { data: chatData, error } = await supabase
             .from('chats')
             .insert({
                 conversation_id: conversationId,
                 thread_id: conversationId, // Keep for backward compatibility
-                prompt_id: PROMPT_ID,
+                prompt_id: promptId,
+                chat_mode,
                 user_id: user.id,
                 title,
             })

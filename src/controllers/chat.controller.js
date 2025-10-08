@@ -2,12 +2,15 @@ const { createChat, updateChat, getAllChats, deleteChat } = require("../services
 const catchAsync = require("../utils/catchAsync");
 
 const create = catchAsync(async (req, res) => {
-  const chat = await createChat(req.user, req.body.title);
+  const chat = await createChat(req.user, req.body.title, req.body.chat_mode || 'arcoai');
   res.json({ chat });
 });
 
 const patch = catchAsync(async (req, res) => {
-  const chat = await updateChat(req.user, req.params.chatId, req.body.title);
+  const chat = await updateChat(req.user, req.params.chatId, {
+    title: req.body.title,
+    chat_mode: req.body.chat_mode,
+  });
   res.json({ chat });
 });
 

@@ -12,6 +12,7 @@ const sendMessage = {
         date: Joi.string().required()
       })
     ).optional(),
+    chat_mode: Joi.string().valid('arcoai', 'personal_lessons').optional(),
   }),
 };
 
@@ -31,6 +32,7 @@ const sendFirstMessage = {
         date: Joi.string().required()
       })
     ).optional(),
+    chat_mode: Joi.string().valid('arcoai', 'personal_lessons').optional(),
   }),
 };
 

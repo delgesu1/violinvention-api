@@ -4,6 +4,7 @@ const { objectId } = require("./custom.validation");
 const createChat = {
   body: Joi.object().keys({
     title: Joi.string().optional(),
+    chat_mode: Joi.string().valid('arcoai', 'personal_lessons').optional(),
   }),
 };
 
@@ -13,7 +14,8 @@ const updateChat = {
   }),
   body: Joi.object().keys({
     title: Joi.string().optional(),
-  }),
+    chat_mode: Joi.string().valid('arcoai', 'personal_lessons').optional(),
+  }).min(1),
 };
 
 const deleteChat = {

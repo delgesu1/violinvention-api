@@ -23,6 +23,7 @@ const sendFirstMessage = catchAsync(async (req, res, next) => {
     message: req.body.message,
     instruction_token: req.body.instruction_token,
     lesson_context: req.body.lesson_context,
+    chat_mode: req.body.chat_mode,
     user: req.user,
     req,
     res,

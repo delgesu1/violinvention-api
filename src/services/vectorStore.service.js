@@ -230,7 +230,10 @@ const deleteLessonFromVectorStore = async (userId, vectorStoreFileId, openaiFile
     console.log(`[VectorStore] Removed file ${vectorStoreFileId} from vector store ${vectorStoreId}`);
     vectorStoreDeletionSuccess = true;
   } catch (error) {
-    console.error(`[VectorStore] Failed to remove file from vector store:`, error.message);
+    console.error(
+      `[VectorStore] Failed to remove file ${vectorStoreFileId} from vector store ${vectorStoreId}:`,
+      error.message
+    );
     // Continue to delete OpenAI file even if vector store deletion fails
   }
 
@@ -252,7 +255,7 @@ const deleteLessonFromVectorStore = async (userId, vectorStoreFileId, openaiFile
     console.log(`[VectorStore] Deleted OpenAI file ${openaiFileId}`);
     openaiFileDeletionSuccess = true;
   } catch (error) {
-    console.error(`[VectorStore] Failed to delete OpenAI file:`, error.message);
+    console.error(`[VectorStore] Failed to delete OpenAI file ${openaiFileId}:`, error.message);
   }
 
   return {

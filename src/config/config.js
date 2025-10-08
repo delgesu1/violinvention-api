@@ -15,6 +15,8 @@ const envVarsSchema = Joi.object()
     OPENAI_API_KEY:Joi.string().required(),
     OPENAI_PROJECT_ID:Joi.string().optional(), // Required for project-scoped keys (sk-proj-...)
     PROMPT_ID:Joi.string().optional(), // New Responses API
+    PROMPT_ID_PERSONAL_LESSONS:Joi.string().optional(),
+    PROMPT_VERSION_PERSONAL_LESSONS:Joi.string().optional(),
     VECTOR_STORE_ID:Joi.string().optional(), // Vector store for knowledge base
     ASSISTANT_ID:Joi.string().optional(), // Legacy, optional for migration
     OPENAI_API_MODEL:Joi.string().required(),
@@ -51,6 +53,8 @@ module.exports = {
       vectorStoreId: envVars.VECTOR_STORE_ID || 'vs_rnnqexe2zwkUBkn5NInfTRt4', // Legacy, kept for migration
       assistantId: envVars.ASSISTANT_ID, // Legacy, kept for migration
       model: envVars.OPENAI_API_MODEL || 'gpt-5',
+      personalLessonsPromptId: envVars.PROMPT_ID_PERSONAL_LESSONS || 'pmpt_68e5827e6b9881938d5ab3b67db7e72509246b40d798fce0',
+      personalLessonsPromptVersion: envVars.PROMPT_VERSION_PERSONAL_LESSONS || '1',
     },
     botClient:{
       key: envVars.OPENAI_API_KEY_BOT || envVars.OPENAI_API_KEY,

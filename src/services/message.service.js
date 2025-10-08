@@ -1,11 +1,11 @@
 const { supabase } = require("../config/supabase.js");
-const { openaiClient, PROMPT_ID, PROMPT_VERSION, botClient, PROMPT_ID_BOT, PROMPT_VERSION_BOT } = require("../config/openai");
+const { openaiClient, PROMPT_ID, PROMPT_VERSION, VECTOR_STORE_ID, PROMPT_ID_PERSONAL_LESSONS, PROMPT_VERSION_PERSONAL_LESSONS, botClient, PROMPT_ID_BOT, PROMPT_VERSION_BOT } = require("../config/openai");
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 const { createChatWithFirstMessage } = require('./chat.service');
 const { getBrief, saveBrief, updateBrief, toWire, generateOutline, approxTokens, isContentfulOutline } = require('./brief.service');
 const { createMemoryCardFilter } = require('./memoryCardFilter');
-const { searchVectorStore } = require('./vectorStore.service');
+const { getUserVectorStore } = require('./vectorStore.service');
 
 // Helper function to extract text from various event shapes
 const getTextDelta = (ev) => {
@@ -266,41 +266,8 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         const useRecent = isContentfulOutline(recentOutline);
         const outlinesDiffer = initialOutline !== recentOutline;
 
-        // SEARCH VECTOR STORE for relevant lesson history
-        let vectorStoreContext = '';
-        try {
-            const searchResults = await searchVectorStore(user.id, userMessageContent, 3);
-
-            if (searchResults && searchResults.length > 0) {
-                vectorStoreContext = '=== RELEVANT LESSON HISTORY ===\n';
-
-                searchResults.forEach((result, index) => {
-                    const attrs = result.attributes || {};
-                    vectorStoreContext += `\nLesson ${index + 1} (${attrs.date || 'Unknown'}):\n`;
-                    vectorStoreContext += `Title: ${attrs.title || 'Unknown'}\n`;
-                    if (attrs.student_name) {
-                        vectorStoreContext += `Student: ${attrs.student_name}\n`;
-                    }
-                    // Include the content from the search result
-                    const contentText = result.content?.[0]?.text || '';
-                    if (contentText) {
-                        vectorStoreContext += `\n${contentText}\n`;
-                    }
-                    vectorStoreContext += '\n---\n';
-                });
-
-                vectorStoreContext += '=== END LESSON HISTORY ===\n\n';
-                console.log('[VectorStore] Added context from', searchResults.length, 'lessons');
-            } else {
-                console.log('[VectorStore] No relevant lessons found');
-            }
-        } catch (error) {
-            console.error('[VectorStore] Search failed (non-critical):', error.message);
-            vectorStoreContext = '';
-        }
-
         // BUILD INPUT WITH CONVERSATION CONTEXT
-        // Build segments array: brief → vector store → outlines → user message → instruction
+        // Build segments array: brief → outlines → user message → instruction
         const segments = [];
 
         // 1. Add conversation brief (if exists)
@@ -308,17 +275,12 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
             segments.push(`Conversation context: ${wireBrief}`);
         }
 
-        // 2. Add vector store context (NEW - inserted here)
-        if (vectorStoreContext) {
-            segments.push(vectorStoreContext);
-        }
-
-        // 3. Add initial outline if contentful
+        // 2. Add initial outline if contentful
         if (useInitial && outlinesDiffer) {
             segments.push(`Initial response outline: ${initialOutline}`);
         }
 
-        // 4. Add recent outline if contentful or if no initial outline
+        // 3. Add recent outline if contentful or if no initial outline
         if (useRecent && (outlinesDiffer || !useInitial)) {
             segments.push(`Previous response outline: ${recentOutline}`);
         } else if (!useRecent && !useInitial && recentOutline) {
@@ -326,40 +288,72 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
             segments.push(`Previous response outline: ${recentOutline}`);
         }
 
-        // 5. Add user message and memory instruction
+        // 4. Add user message and memory instruction
         segments.push(userMessageContent);
         segments.push(MEMORY_INSTRUCTION);
 
         const contextualInput = segments.filter(Boolean).join('\n\n');
 
         console.log('[Conversation Context] Brief tokens:', approxTokens(wireBrief));
-        console.log('[Conversation Context] Vector store tokens:', approxTokens(vectorStoreContext));
         console.log('[Conversation Context] Initial outline tokens:', approxTokens(initialOutline));
         console.log('[Conversation Context] Recent outline tokens:', approxTokens(recentOutline));
         console.log('[Conversation Context] Using initial:', useInitial, 'Using recent:', useRecent);
         console.log('[Conversation Context] Total context tokens:', approxTokens(contextualInput));
 
-        // Create response using Responses API (OpenAI SDK 5.x)
+        // Determine chat mode
+        const chatMode = chat.chat_mode || 'arcoai';
+        let promptId = PROMPT_ID;
+        let promptVersion = PROMPT_VERSION;
+        let vectorStoreIds;
+
+        if (chatMode === 'personal_lessons') {
+            const userVectorStoreId = await getUserVectorStore(user.id);
+            if (userVectorStoreId) {
+                vectorStoreIds = [userVectorStoreId];
+                promptId = PROMPT_ID_PERSONAL_LESSONS;
+                promptVersion = PROMPT_VERSION_PERSONAL_LESSONS;
+                console.log(`[VectorStore] Using personal lessons store ${userVectorStoreId} for user ${user.id}`);
+            } else {
+                promptId = PROMPT_ID_PERSONAL_LESSONS;
+                promptVersion = PROMPT_VERSION_PERSONAL_LESSONS;
+                console.warn(`[VectorStore] User ${user.id} has no personal vector store; proceeding without file_search context`);
+            }
+        } else {
+            vectorStoreIds = [VECTOR_STORE_ID];
+        }
+
         console.log('[OpenAI API] About to call with conversation context:', {
-            prompt_id: PROMPT_ID,
-            version: PROMPT_VERSION,
-            inputLength: contextualInput.length
+            chatMode,
+            prompt_id: promptId,
+            version: promptVersion,
+            inputLength: contextualInput.length,
+            hasVectorStore: Array.isArray(vectorStoreIds) && vectorStoreIds.length > 0
         });
 
-        const responseStream = await openaiClient.responses.create({
+        const responseOptions = {
             prompt: {
-                id: PROMPT_ID,
-                version: PROMPT_VERSION
+                id: promptId,
+                version: promptVersion
             },
             input: contextualInput,
             stream: true,
-            // Pass lesson context as metadata if provided
-            ...(lesson_context && { 
-                metadata: { 
-                    lesson_context: JSON.stringify(lesson_context) 
-                } 
+            ...(lesson_context && {
+                metadata: {
+                    lesson_context: JSON.stringify(lesson_context)
+                }
             })
-        });
+        };
+
+        if (Array.isArray(vectorStoreIds) && vectorStoreIds.length > 0) {
+            responseOptions.tool_resources = {
+                file_search: {
+                    vector_store_ids: vectorStoreIds
+                }
+            };
+            responseOptions.tools = [{ type: 'file_search' }];
+        }
+
+        const responseStream = await openaiClient.responses.create(responseOptions);
 
         // Process streaming response
         let isFirstEvent = true;
@@ -585,7 +579,7 @@ const findAllMessages = async (chat_id, user) => {
     return messages || [];
 };
 
-const sendFirstMessage = async ({ message, instruction_token, lesson_context, user, req, res }) => {
+const sendFirstMessage = async ({ message, instruction_token, lesson_context, chat_mode = 'arcoai', user, req, res }) => {
     res.writeHead(200, { "Content-type": "text/plain" });
 
     const abortController = new AbortController();
@@ -649,7 +643,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
 
     try {
         // Create chat with first message using Responses API (conversation)
-        const { chat, conversation_id, isReusedChat } = await createChatWithFirstMessage(user, message, instruction_token);
+        const { chat, conversation_id, isReusedChat } = await createChatWithFirstMessage(user, message, instruction_token, chat_mode);
         chatId = chat.chat_id;
         conversationId = conversation_id;
         
@@ -699,15 +693,14 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
         const userMessageContent = `${message} ${instruction_token}`;
         const userDisplayContent = message; // Clean message for display
         
-        console.log('[Backend sendFirstMessage] OpenAI Input Prompt:', {
+        console.log('[Backend sendFirstMessage] Prepared user input:', {
             originalMessage: message,
             instructionToken: instruction_token || '(empty)',
             instructionTokenLength: instruction_token ? instruction_token.length : 0,
             finalPrompt: userMessageContent,
             finalPromptLength: userMessageContent.length,
             hasLessonContext: !!lesson_context,
-            promptId: PROMPT_ID,
-            promptVersion: PROMPT_VERSION
+            chatMode: chat_mode
         });
 
         // Save user message to database first
@@ -733,27 +726,56 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, us
             MEMORY_INSTRUCTION
         ].join('\n\n');
 
-        // Create response using Responses API (OpenAI SDK 5.x)
+        let promptId = PROMPT_ID;
+        let promptVersion = PROMPT_VERSION;
+        let vectorStoreIds;
+
+        if (chat_mode === 'personal_lessons') {
+            const userVectorStoreId = await getUserVectorStore(user.id);
+            if (userVectorStoreId) {
+                vectorStoreIds = [userVectorStoreId];
+                console.log(`[VectorStore] Using personal lessons store ${userVectorStoreId} for user ${user.id}`);
+            } else {
+                console.warn(`[VectorStore] User ${user.id} has no personal vector store; proceeding without file_search context`);
+            }
+            promptId = PROMPT_ID_PERSONAL_LESSONS;
+            promptVersion = PROMPT_VERSION_PERSONAL_LESSONS;
+        } else {
+            vectorStoreIds = [VECTOR_STORE_ID];
+        }
+
         console.log('[OpenAI API] About to call with MEMORY instruction (first message):', {
-            prompt_id: PROMPT_ID,
-            version: PROMPT_VERSION,
-            inputLength: contextualInput.length
+            chatMode: chat_mode,
+            prompt_id: promptId,
+            version: promptVersion,
+            inputLength: contextualInput.length,
+            hasVectorStore: Array.isArray(vectorStoreIds) && vectorStoreIds.length > 0
         });
 
-        const responseStream = await openaiClient.responses.create({
+        const responseOptions = {
             prompt: {
-                id: PROMPT_ID,
-                version: PROMPT_VERSION
+                id: promptId,
+                version: promptVersion
             },
             input: contextualInput,
             stream: true,
-            // Pass lesson context as metadata if provided
-            ...(lesson_context && { 
-                metadata: { 
-                    lesson_context: JSON.stringify(lesson_context) 
-                } 
+            ...(lesson_context && {
+                metadata: {
+                    lesson_context: JSON.stringify(lesson_context)
+                }
             })
-        });
+        };
+
+        if (Array.isArray(vectorStoreIds) && vectorStoreIds.length > 0) {
+            responseOptions.tool_resources = {
+                file_search: {
+                    vector_store_ids: vectorStoreIds
+                }
+            };
+            responseOptions.tools = [{ type: 'file_search' }];
+        }
+
+        const responseStream = await openaiClient.responses.create(responseOptions);
 
         // Process streaming response
         let isFirstEvent = true;
