@@ -1,9 +1,17 @@
+const fs = require('fs');
+const path = require('path');
 const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
-const { openaiClient } = require('../config/openai');
+const { openaiClient, PROMPT_ID, PROMPT_ID_PERSONAL_LESSONS } = require('../config/openai');
 
 const promptCache = new Map();
 const inflightFetches = new Map();
+const fallbackInstructionsCache = new Map();
+
+const FALLBACK_PROMPT_PATHS = new Map([
+  [PROMPT_ID, path.join(__dirname, '../prompts/arcoai.md')],
+  [PROMPT_ID_PERSONAL_LESSONS, path.join(__dirname, '../prompts/personal_lessons.md')],
+]);
 
 const cacheKeyFor = (promptId, promptVersion) => `${promptId || 'default'}:${promptVersion || 'latest'}`;
 
@@ -121,6 +129,32 @@ const fetchPromptDefinition = async (promptId, promptVersion) => {
   return openaiClient.prompts.retrieve(promptId, params);
 };
 
+const loadFallbackInstructionsFromFile = (promptId) => {
+  if (!promptId) {
+    return null;
+  }
+
+  const filePath = FALLBACK_PROMPT_PATHS.get(promptId);
+  if (!filePath) {
+    return null;
+  }
+
+  if (fallbackInstructionsCache.has(filePath)) {
+    return fallbackInstructionsCache.get(filePath);
+  }
+
+  try {
+    const contents = fs.readFileSync(filePath, 'utf8');
+    const normalized = contents.trim();
+    fallbackInstructionsCache.set(filePath, normalized.length > 0 ? normalized : null);
+    return fallbackInstructionsCache.get(filePath);
+  } catch (error) {
+    console.warn(`[PromptFallback] Unable to read fallback instructions for ${promptId}: ${error.message}`);
+    fallbackInstructionsCache.set(filePath, null);
+    return null;
+  }
+};
+
 const getPromptMessages = async ({ promptId, promptVersion, fallbackInstructions } = {}) => {
   const cacheKey = cacheKeyFor(promptId, promptVersion);
 
@@ -149,7 +183,8 @@ const getPromptMessages = async ({ promptId, promptVersion, fallbackInstructions
       const normalized = normalizePromptMessages(messagesArray);
 
       if (normalized.length === 0) {
-        const fallback = buildFallbackMessages(fallbackInstructions);
+        const fallbackInstructionSource = fallbackInstructions || loadFallbackInstructionsFromFile(promptId);
+        const fallback = buildFallbackMessages(fallbackInstructionSource);
         if (fallback) {
           promptCache.set(cacheKey, fallback);
           return fallback;
@@ -161,7 +196,8 @@ const getPromptMessages = async ({ promptId, promptVersion, fallbackInstructions
       promptCache.set(cacheKey, normalized);
       return normalized;
     } catch (error) {
-      const fallback = buildFallbackMessages(fallbackInstructions);
+      const fallbackInstructionSource = fallbackInstructions || loadFallbackInstructionsFromFile(promptId);
+      const fallback = buildFallbackMessages(fallbackInstructionSource);
       if (fallback) {
         promptCache.set(cacheKey, fallback);
         return fallback;
