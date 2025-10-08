@@ -106,9 +106,13 @@ const formatResponseEventForFrontend = (responseEvent) => {
 // Memory card instruction for conversation context management
 // Uses sentinel parsing approach for reliability
 const MEMORY_INSTRUCTION = `
-At the end of your response, update conversation memory using this exact format:
+At the end of your response, emit a memory card using this exact format on its own line:
 <MEMORY_CARD>{"goal":"Master vibrato technique","decisions":["Practice 10 min daily"],"open_q":["Speed vs accuracy?"],"techniques":["vibrato"],"lesson_context":"intermediate vibrato"}</MEMORY_CARD>
-Keep the JSON under 120 tokens total.`;
+Rules:
+- Output the tag exactly once and nothing else after it.
+- Use valid JSON with double quotes around every key and string value.
+- Use the keys goal, decisions, open_q, techniques, lesson_context (arrays can be empty).
+- Keep the JSON under 120 tokens total.`;
 
 const sendMessage = async ({ message, chat_id, instruction_token, lesson_context, user, req, res }) => {
     res.writeHead(200, { "Content-type": "text/plain" });
@@ -504,7 +508,9 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                         await saveBrief(chat_id, user.id, updatedBrief);
                         console.log('[Brief Updated] New token count:', approxTokens(toWire(updatedBrief)));
                     } catch (parseError) {
-                        console.error('[MEMORY_CARD] Parse error, keeping previous brief:', parseError);
+                        console.error('[MEMORY_CARD] Parse error, keeping previous brief:', parseError, {
+                            cardPreview: capturedCard.slice(0, 200)
+                        });
                     }
                 }
 
@@ -959,7 +965,9 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                         await saveBrief(chatId, user.id, updatedBrief);
                         console.log('[First Message] Brief created with token count:', approxTokens(toWire(updatedBrief)));
                     } catch (parseError) {
-                        console.error('[MEMORY_CARD] Parse error on first message, saving default brief:', parseError);
+                        console.error('[MEMORY_CARD] Parse error on first message, saving default brief:', parseError, {
+                            cardPreview: capturedCard.slice(0, 200)
+                        });
                         // Save default brief even if parsing fails
                         await saveBrief(chatId, user.id, initialBrief);
                     }

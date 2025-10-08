@@ -126,7 +126,18 @@ const fetchPromptDefinition = async (promptId, promptVersion) => {
     params.version = promptVersion;
   }
 
-  return openaiClient.prompts.retrieve(promptId, params);
+  try {
+    return await openaiClient.prompts.retrieve(promptId, params);
+  } catch (error) {
+    console.error('[PromptFetch] retrieve failed', {
+      promptId,
+      promptVersion,
+      status: error?.status,
+      code: error?.code,
+      message: error?.message,
+    });
+    throw error;
+  }
 };
 
 const loadFallbackInstructionsFromFile = (promptId) => {
