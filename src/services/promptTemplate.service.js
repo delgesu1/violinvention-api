@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
+const config = require('../config/config');
 const { openaiClient, PROMPT_ID, PROMPT_ID_PERSONAL_LESSONS } = require('../config/openai');
 
 const promptCache = new Map();
@@ -126,16 +127,61 @@ const fetchPromptDefinition = async (promptId, promptVersion) => {
     params.version = promptVersion;
   }
 
+  if (openaiClient.prompts && typeof openaiClient.prompts.retrieve === 'function') {
+    try {
+      return await openaiClient.prompts.retrieve(promptId, params);
+    } catch (error) {
+      console.error('[PromptFetch] retrieve failed', {
+        promptId,
+        promptVersion,
+        status: error?.status,
+        code: error?.code,
+        message: error?.message,
+      });
+      throw error;
+    }
+  }
+
+  const query = promptVersion ? `?version=${encodeURIComponent(promptVersion)}` : '';
+  const url = `https://api.openai.com/v1/prompts/${promptId}${query}`;
+
   try {
-    return await openaiClient.prompts.retrieve(promptId, params);
-  } catch (error) {
-    console.error('[PromptFetch] retrieve failed', {
-      promptId,
-      promptVersion,
-      status: error?.status,
-      code: error?.code,
-      message: error?.message,
+    const headers = {
+      Authorization: `Bearer ${config.openai.mainClient.key}`,
+      'Content-Type': 'application/json',
+      'OpenAI-Beta': 'prompts=v1',
+    };
+
+    if (config.openai.mainClient.projectId) {
+      headers['OpenAI-Project'] = config.openai.mainClient.projectId;
+    }
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers,
     });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error('[PromptFetch] REST fallback failed', {
+        promptId,
+        promptVersion,
+        status: response.status,
+        statusText: response.statusText,
+        bodyPreview: errorBody.slice(0, 200),
+      });
+      throw new ApiError(response.status, `Failed to retrieve prompt ${promptId}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (!(error instanceof ApiError)) {
+      console.error('[PromptFetch] REST fallback error', {
+        promptId,
+        promptVersion,
+        message: error.message,
+      });
+    }
     throw error;
   }
 };
