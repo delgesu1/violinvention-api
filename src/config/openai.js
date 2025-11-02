@@ -10,6 +10,12 @@ const OPENAI_MODEL = config.openai.mainClient.model;
 const PROMPT_ID_PERSONAL_LESSONS = config.openai.mainClient.personalLessonsPromptId;
 const PROMPT_VERSION_PERSONAL_LESSONS = config.openai.mainClient.personalLessonsPromptVersion;
 const PROMPT_INSTRUCTIONS_PERSONAL_LESSONS = config.openai.mainClient.personalLessonsPromptInstructions;
+const PROMPT_ID_PERSONAL_LESSONS_DEEPDIVE = config.openai.mainClient.personalLessonsDeepDivePromptId;
+const PROMPT_VERSION_PERSONAL_LESSONS_DEEPDIVE = config.openai.mainClient.personalLessonsDeepDivePromptVersion;
+const PROMPT_INSTRUCTIONS_PERSONAL_LESSONS_DEEPDIVE = config.openai.mainClient.personalLessonsDeepDivePromptInstructions;
+const PROMPT_ID_DEEPTHINK = config.openai.mainClient.deepThinkPromptId;
+const PROMPT_VERSION_DEEPTHINK = config.openai.mainClient.deepThinkPromptVersion;
+const PROMPT_INSTRUCTIONS_DEEPTHINK = config.openai.mainClient.deepThinkPromptInstructions;
 
 // Legacy Assistants API configuration (kept for backward compatibility)
 const ASSISTANT_ID = config.openai.mainClient.assistantId;
@@ -40,6 +46,12 @@ module.exports = {
   PROMPT_ID_PERSONAL_LESSONS,
   PROMPT_VERSION_PERSONAL_LESSONS,
   PROMPT_INSTRUCTIONS_PERSONAL_LESSONS,
+  PROMPT_ID_PERSONAL_LESSONS_DEEPDIVE,
+  PROMPT_VERSION_PERSONAL_LESSONS_DEEPDIVE,
+  PROMPT_INSTRUCTIONS_PERSONAL_LESSONS_DEEPDIVE,
+  PROMPT_ID_DEEPTHINK,
+  PROMPT_VERSION_DEEPTHINK,
+  PROMPT_INSTRUCTIONS_DEEPTHINK,
   OPENAI_MODEL,
   openaiClient,
   

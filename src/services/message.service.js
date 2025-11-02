@@ -1,5 +1,23 @@
 const { supabase } = require("../config/supabase.js");
-const { openaiClient, PROMPT_ID, PROMPT_VERSION, PROMPT_INSTRUCTIONS, PROMPT_ID_PERSONAL_LESSONS, PROMPT_VERSION_PERSONAL_LESSONS, PROMPT_INSTRUCTIONS_PERSONAL_LESSONS, OPENAI_MODEL, botClient, PROMPT_ID_BOT, PROMPT_VERSION_BOT } = require("../config/openai");
+const {
+    openaiClient,
+    PROMPT_ID,
+    PROMPT_VERSION,
+    PROMPT_INSTRUCTIONS,
+    PROMPT_ID_PERSONAL_LESSONS,
+    PROMPT_VERSION_PERSONAL_LESSONS,
+    PROMPT_INSTRUCTIONS_PERSONAL_LESSONS,
+    PROMPT_ID_PERSONAL_LESSONS_DEEPDIVE,
+    PROMPT_VERSION_PERSONAL_LESSONS_DEEPDIVE,
+    PROMPT_INSTRUCTIONS_PERSONAL_LESSONS_DEEPDIVE,
+    PROMPT_ID_DEEPTHINK,
+    PROMPT_VERSION_DEEPTHINK,
+    PROMPT_INSTRUCTIONS_DEEPTHINK,
+    OPENAI_MODEL,
+    botClient,
+    PROMPT_ID_BOT,
+    PROMPT_VERSION_BOT
+} = require("../config/openai");
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 const { createChatWithFirstMessage } = require('./chat.service');
@@ -114,7 +132,7 @@ Rules:
 - Use the keys goal, decisions, open_q, techniques, lesson_context (arrays can be empty).
 - Keep the JSON under 120 tokens total.`;
 
-const sendMessage = async ({ message, chat_id, instruction_token, lesson_context, user, req, res }) => {
+const sendMessage = async ({ message, chat_id, instruction_token, lesson_context, model = 'arco', user, req, res }) => {
     res.writeHead(200, { "Content-type": "text/plain" });
 
     const abortController = new AbortController();
@@ -186,6 +204,13 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
             throw new ApiError(500, "Chat has no valid conversation or thread ID");
         }
 
+        const normalizedModel = typeof model === 'string' ? model.toLowerCase().trim() : 'arco';
+        let modelVariant = normalizedModel === 'arco-pro' ? 'arco-pro' : 'arco';
+        if (model && modelVariant === 'arco' && normalizedModel !== 'arco') {
+            console.warn(`[DeepThink] Unsupported model variant "${model}" received, defaulting to "arco"`);
+        }
+        const isDeepThink = modelVariant === 'arco-pro';
+
         const userMessageContent = `${message} ${instruction_token}`;
         const userDisplayContent = message; // Clean message for display
         
@@ -196,8 +221,7 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
             finalPrompt: userMessageContent,
             finalPromptLength: userMessageContent.length,
             hasLessonContext: !!lesson_context,
-            promptId: PROMPT_ID,
-            promptVersion: PROMPT_VERSION
+            modelVariant,
         });
 
         // Save user message to database first
@@ -342,6 +366,25 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
             } else {
                 console.log(`[VectorStore] No personal lesson matches found for user ${user.id} (chat ${chat_id})`);
             }
+
+            if (isDeepThink) {
+                const deepDivePromptId = PROMPT_ID_PERSONAL_LESSONS_DEEPDIVE || PROMPT_ID_DEEPTHINK;
+                if (deepDivePromptId) {
+                    promptId = deepDivePromptId;
+                }
+
+                if (deepDivePromptId === PROMPT_ID_PERSONAL_LESSONS_DEEPDIVE) {
+                    promptVersion = PROMPT_VERSION_PERSONAL_LESSONS_DEEPDIVE || promptVersion;
+                    promptInstructions = PROMPT_INSTRUCTIONS_PERSONAL_LESSONS_DEEPDIVE || promptInstructions;
+                } else {
+                    promptVersion = PROMPT_VERSION_DEEPTHINK || promptVersion;
+                    promptInstructions = PROMPT_INSTRUCTIONS_DEEPTHINK || promptInstructions;
+                }
+            }
+        } else if (isDeepThink) {
+            promptId = PROMPT_ID_DEEPTHINK || PROMPT_ID;
+            promptVersion = PROMPT_VERSION_DEEPTHINK || PROMPT_VERSION;
+            promptInstructions = PROMPT_INSTRUCTIONS_DEEPTHINK || promptInstructions;
         }
 
         if (retrievalContext) {
@@ -354,6 +397,11 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         console.log('[Conversation Context] Recent outline tokens:', approxTokens(recentOutline));
         console.log('[Conversation Context] Using initial:', useInitial, 'Using recent:', useRecent);
         console.log('[Conversation Context] Total context tokens:', approxTokens(contextualInput));
+
+        const metadataPayload = {
+            model_variant: modelVariant,
+            ...(lesson_context ? { lesson_context: JSON.stringify(lesson_context) } : {})
+        };
 
         let responseOptions;
 
@@ -374,6 +422,7 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
 
             console.log('[OpenAI API] About to call with conversation context:', {
                 chatMode,
+                modelVariant,
                 prompt_id: promptId,
                 version: promptVersion,
                 inputLength: contextualInput.length,
@@ -388,15 +437,12 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                 include: ['reasoning.encrypted_content', 'web_search_call.action.sources'],
                 text: { format: { type: 'text' } },
                 reasoning: { effort: 'low', summary: 'auto' },
-                ...(lesson_context && {
-                    metadata: {
-                        lesson_context: JSON.stringify(lesson_context)
-                    }
-                })
+                metadata: metadataPayload
             };
         } else {
             console.log('[OpenAI API] About to call with conversation context:', {
                 chatMode,
+                modelVariant,
                 prompt_id: promptId,
                 version: promptVersion,
                 inputLength: contextualInput.length,
@@ -414,11 +460,7 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                 include: ['reasoning.encrypted_content', 'web_search_call.action.sources'],
                 text: { format: { type: 'text' } },
                 reasoning: { effort: 'low', summary: 'auto' },
-                ...(lesson_context && {
-                    metadata: {
-                        lesson_context: JSON.stringify(lesson_context)
-                    }
-                })
+                metadata: metadataPayload
             };
         }
 
@@ -650,7 +692,7 @@ const findAllMessages = async (chat_id, user) => {
     return messages || [];
 };
 
-const sendFirstMessage = async ({ message, instruction_token, lesson_context, chat_mode = 'arcoai', user, req, res }) => {
+const sendFirstMessage = async ({ message, instruction_token, lesson_context, chat_mode = 'arcoai', model = 'arco', user, req, res }) => {
     res.writeHead(200, { "Content-type": "text/plain" });
 
     const abortController = new AbortController();
@@ -761,6 +803,13 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
             });
         }
 
+        const normalizedModel = typeof model === 'string' ? model.toLowerCase().trim() : 'arco';
+        let modelVariant = normalizedModel === 'arco-pro' ? 'arco-pro' : 'arco';
+        if (model && modelVariant === 'arco' && normalizedModel !== 'arco') {
+            console.warn(`[DeepThink] Unsupported model variant "${model}" received for first message, defaulting to "arco"`);
+        }
+        const isDeepThink = modelVariant === 'arco-pro';
+
         const userMessageContent = `${message} ${instruction_token}`;
         const userDisplayContent = message; // Clean message for display
         
@@ -771,7 +820,8 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
             finalPrompt: userMessageContent,
             finalPromptLength: userMessageContent.length,
             hasLessonContext: !!lesson_context,
-            chatMode: chat_mode
+            chatMode: chat_mode,
+            modelVariant,
         });
 
         // Save user message to database first
@@ -840,7 +890,31 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
             } else {
                 console.log(`[VectorStore] No personal lesson matches found for user ${user.id} (new chat ${chatId})`);
             }
+
+            if (isDeepThink) {
+                const deepDivePromptId = PROMPT_ID_PERSONAL_LESSONS_DEEPDIVE || PROMPT_ID_DEEPTHINK;
+                if (deepDivePromptId) {
+                    promptId = deepDivePromptId;
+                }
+
+                if (deepDivePromptId === PROMPT_ID_PERSONAL_LESSONS_DEEPDIVE) {
+                    promptVersion = PROMPT_VERSION_PERSONAL_LESSONS_DEEPDIVE || promptVersion;
+                    promptInstructions = PROMPT_INSTRUCTIONS_PERSONAL_LESSONS_DEEPDIVE || promptInstructions;
+                } else {
+                    promptVersion = PROMPT_VERSION_DEEPTHINK || promptVersion;
+                    promptInstructions = PROMPT_INSTRUCTIONS_DEEPTHINK || promptInstructions;
+                }
+            }
+        } else if (isDeepThink) {
+            promptId = PROMPT_ID_DEEPTHINK || PROMPT_ID;
+            promptVersion = PROMPT_VERSION_DEEPTHINK || PROMPT_VERSION;
+            promptInstructions = PROMPT_INSTRUCTIONS_DEEPTHINK || promptInstructions;
         }
+
+        const metadataPayload = {
+            model_variant: modelVariant,
+            ...(lesson_context ? { lesson_context: JSON.stringify(lesson_context) } : {})
+        };
 
         let responseOptions;
 
@@ -861,6 +935,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
 
             console.log('[OpenAI API] About to call with MEMORY instruction (first message):', {
                 chatMode: chat_mode,
+                modelVariant,
                 prompt_id: promptId,
                 version: promptVersion,
                 inputLength: contextualInput.length,
@@ -875,25 +950,22 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                 include: ['reasoning.encrypted_content', 'web_search_call.action.sources'],
                 text: { format: { type: 'text' } },
                 reasoning: { effort: 'low', summary: 'auto' },
-                ...(lesson_context && {
-                    metadata: {
-                        lesson_context: JSON.stringify(lesson_context)
-                    }
-                })
+                metadata: metadataPayload
             };
         } else {
             console.log('[OpenAI API] About to call with MEMORY instruction (first message):', {
                 chatMode: chat_mode,
-                prompt_id: PROMPT_ID,
-                version: PROMPT_VERSION,
+                modelVariant,
+                prompt_id: promptId,
+                version: promptVersion,
                 inputLength: contextualInput.length,
                 retrievalMode: 'prompt_reference'
             });
 
             responseOptions = {
                 prompt: {
-                    id: PROMPT_ID,
-                    version: PROMPT_VERSION
+                    id: promptId,
+                    version: promptVersion
                 },
                 input: contextualInput,
                 stream: true,
@@ -901,11 +973,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                 include: ['reasoning.encrypted_content', 'web_search_call.action.sources'],
                 text: { format: { type: 'text' } },
                 reasoning: { effort: 'low', summary: 'auto' },
-                ...(lesson_context && {
-                    metadata: {
-                        lesson_context: JSON.stringify(lesson_context)
-                    }
-                })
+                metadata: metadataPayload
             };
         }
 

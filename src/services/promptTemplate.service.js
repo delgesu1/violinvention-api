@@ -3,16 +3,17 @@ const path = require('path');
 const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
 const config = require('../config/config');
-const { openaiClient, PROMPT_ID, PROMPT_ID_PERSONAL_LESSONS } = require('../config/openai');
+const { openaiClient, PROMPT_ID } = require('../config/openai');
 
 const promptCache = new Map();
 const inflightFetches = new Map();
 const fallbackInstructionsCache = new Map();
 
-const FALLBACK_PROMPT_PATHS = new Map([
-  [PROMPT_ID, path.join(__dirname, '../prompts/arcoai.md')],
-  [PROMPT_ID_PERSONAL_LESSONS, path.join(__dirname, '../prompts/personal_lessons.md')],
-]);
+const FALLBACK_PROMPT_PATHS = new Map();
+
+if (PROMPT_ID) {
+  FALLBACK_PROMPT_PATHS.set(PROMPT_ID, path.join(__dirname, '../prompts/arcoai.md'));
+}
 
 const cacheKeyFor = (promptId, promptVersion) => `${promptId || 'default'}:${promptVersion || 'latest'}`;
 

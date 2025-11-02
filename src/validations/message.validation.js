@@ -13,6 +13,7 @@ const sendMessage = {
       })
     ).optional(),
     chat_mode: Joi.string().valid('arcoai', 'personal_lessons').optional(),
+    model: Joi.string().valid('arco', 'arco-pro').optional(),
   }),
 };
 
@@ -33,6 +34,7 @@ const sendFirstMessage = {
       })
     ).optional(),
     chat_mode: Joi.string().valid('arcoai', 'personal_lessons').optional(),
+    model: Joi.string().valid('arco', 'arco-pro').optional(),
   }),
 };
 
