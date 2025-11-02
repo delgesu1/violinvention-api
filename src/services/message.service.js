@@ -24,7 +24,6 @@ const { createChatWithFirstMessage } = require('./chat.service');
 const { getBrief, saveBrief, updateBrief, toWire, generateOutline, approxTokens, isContentfulOutline } = require('./brief.service');
 const { createMemoryCardFilter } = require('./memoryCardFilter');
 const { searchVectorStore } = require('./vectorStore.service');
-const { getPromptMessages } = require('./promptTemplate.service');
 
 // Helper function to extract text from various event shapes
 const getTextDelta = (ev) => {
@@ -287,7 +286,7 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                 .single()
         ]);
 
-        const initialOutline = initialMessage?.outline || "";
+        const initialOutline = brief.initial_outline || initialMessage?.outline || "";
         const recentOutline = recentMessage?.outline || "";
 
         // Determine which outlines to include based on content
@@ -414,32 +413,29 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         let responseOptions;
 
         if (chatMode === 'personal_lessons') {
-            const promptMessages = await getPromptMessages({
-                promptId,
-                promptVersion,
-                fallbackInstructions: promptInstructions,
-            });
+            const promptReference = promptId ? { id: promptId } : null;
+            if (promptReference && promptVersion) {
+                promptReference.version = promptVersion;
+            }
 
-            const inputMessages = [
-                ...promptMessages,
-                {
-                    role: 'user',
-                    content: [{ type: 'input_text', text: contextualInput }],
-                },
-            ];
+            const overrideInstructions = (promptInstructions || '').trim();
+            const personalInput = overrideInstructions
+                ? `${overrideInstructions}\n\n${contextualInput}`
+                : contextualInput;
 
             console.log('[OpenAI API] About to call with conversation context:', {
                 chatMode,
                 modelVariant,
                 prompt_id: promptId,
                 version: promptVersion,
-                inputLength: contextualInput.length,
-                retrievalMode: `manual_lookup:${vectorSearchResults.length}`
+                inputLength: personalInput.length,
+                retrievalMode: `manual_lookup:${vectorSearchResults.length}`,
+                usingPromptReference: !!promptReference
             });
 
             responseOptions = {
                 model: OPENAI_MODEL,
-                input: inputMessages,
+                input: personalInput,
                 stream: true,
                 store: true,
                 include: ['reasoning.encrypted_content', 'web_search_call.action.sources'],
@@ -447,6 +443,10 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                 reasoning: { effort: 'low', summary: 'auto' },
                 metadata: metadataPayload
             };
+
+            if (promptReference) {
+                responseOptions.prompt = promptReference;
+            }
         } else {
             console.log('[OpenAI API] About to call with conversation context:', {
                 chatMode,
@@ -579,14 +579,14 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         if (assistantMessageClean && !abortController.signal.aborted) {
             try {
                 let outline = "";
+                let nextBrief = brief;
 
                 // Process captured MEMORY_CARD if found
                 if (capturedCard) {
                     try {
                         const memoryCard = JSON.parse(capturedCard);
-                        const updatedBrief = updateBrief(brief, memoryCard);
-                        await saveBrief(chat_id, user.id, updatedBrief);
-                        console.log('[Brief Updated] New token count:', approxTokens(toWire(updatedBrief)));
+                        nextBrief = updateBrief(brief, memoryCard);
+                        console.log('[Brief Updated] New token count:', approxTokens(toWire(nextBrief)));
                     } catch (parseError) {
                         console.error('[MEMORY_CARD] Parse error, keeping previous brief:', parseError, {
                             cardPreview: capturedCard.slice(0, 200)
@@ -599,6 +599,22 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
 
                 // Generate outline for next turn from clean text
                 outline = generateOutline(assistantMessageClean);
+
+                // Persist updated brief if needed
+                if (capturedCard || !nextBrief.initial_outline) {
+                    if (!nextBrief.initial_outline) {
+                        nextBrief = {
+                            ...nextBrief,
+                            initial_outline: outline,
+                        };
+                    }
+
+                    try {
+                        await saveBrief(chat_id, user.id, nextBrief);
+                    } catch (briefError) {
+                        console.error('[Brief Save] Failed to persist updated brief:', briefError);
+                    }
+                }
 
                 // Save assistant message with outline
                 const { error: saveError } = await supabase
@@ -731,12 +747,16 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
 
     // Initialize brief for first message and hoist variables for finally block access
     const initialBrief = {
-        goal: "",
-        constraints: [],
-        decisions: [],
-        open_q: [],
-        techniques: [],
-        lesson_context: lesson_context?.type || ""
+        summary: {
+            goal: "",
+            constraints: [],
+            decisions: [],
+            open_q: [],
+            techniques: [],
+            lesson_context: lesson_context?.type || ""
+        },
+        memory_cards: [],
+        initial_outline: ""
     };
     let assistantMessageClean = "";
     let capturedCard = null;
@@ -927,32 +947,29 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
         let responseOptions;
 
         if (chat_mode === 'personal_lessons') {
-            const promptMessages = await getPromptMessages({
-                promptId,
-                promptVersion,
-                fallbackInstructions: promptInstructions,
-            });
+            const promptReference = promptId ? { id: promptId } : null;
+            if (promptReference && promptVersion) {
+                promptReference.version = promptVersion;
+            }
 
-            const inputMessages = [
-                ...promptMessages,
-                {
-                    role: 'user',
-                    content: [{ type: 'input_text', text: contextualInput }],
-                },
-            ];
+            const overrideInstructions = (promptInstructions || '').trim();
+            const personalInput = overrideInstructions
+                ? `${overrideInstructions}\n\n${contextualInput}`
+                : contextualInput;
 
             console.log('[OpenAI API] About to call with MEMORY instruction (first message):', {
                 chatMode: chat_mode,
                 modelVariant,
                 prompt_id: promptId,
                 version: promptVersion,
-                inputLength: contextualInput.length,
-                retrievalMode: `manual_lookup:${vectorSearchResults.length}`
+                inputLength: personalInput.length,
+                retrievalMode: `manual_lookup:${vectorSearchResults.length}`,
+                usingPromptReference: !!promptReference
             });
 
             responseOptions = {
                 model: OPENAI_MODEL,
-                input: inputMessages,
+                input: personalInput,
                 stream: true,
                 store: true,
                 include: ['reasoning.encrypted_content', 'web_search_call.action.sources'],
@@ -960,6 +977,10 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                 reasoning: { effort: 'low', summary: 'auto' },
                 metadata: metadataPayload
             };
+
+            if (promptReference) {
+                responseOptions.prompt = promptReference;
+            }
         } else {
             console.log('[OpenAI API] About to call with MEMORY instruction (first message):', {
                 chatMode: chat_mode,
@@ -1092,25 +1113,23 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
         if (assistantMessageClean && !abortController.signal.aborted) {
             try {
                 let outline = "";
+                let nextBrief = initialBrief;
 
                 // Process captured MEMORY_CARD for initial brief creation
                 if (capturedCard) {
                     try {
                         const memoryCard = JSON.parse(capturedCard);
-                        const updatedBrief = updateBrief(initialBrief, memoryCard);
-                        await saveBrief(chatId, user.id, updatedBrief);
-                        console.log('[First Message] Brief created with token count:', approxTokens(toWire(updatedBrief)));
+                        nextBrief = updateBrief(initialBrief, memoryCard);
+                        console.log('[First Message] Brief created with token count:', approxTokens(toWire(nextBrief)));
                     } catch (parseError) {
                         console.error('[MEMORY_CARD] Parse error on first message, saving default brief:', parseError, {
                             cardPreview: capturedCard.slice(0, 200)
                         });
-                        // Save default brief even if parsing fails
-                        await saveBrief(chatId, user.id, initialBrief);
+                        nextBrief = initialBrief;
                     }
                 } else {
-                    // No MEMORY_CARD found, save default brief
-                    console.log('[First Message] No MEMORY_CARD found, saving default brief');
-                    await saveBrief(chatId, user.id, initialBrief);
+                    // No MEMORY_CARD found, keep default brief
+                    console.log('[First Message] No MEMORY_CARD found, using default brief');
                 }
 
                 // Final safety scrub before database storage (paranoia-level)
@@ -1118,6 +1137,19 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
 
                 // Generate outline for next turn from clean text
                 outline = generateOutline(assistantMessageClean);
+
+                if (!nextBrief.initial_outline) {
+                    nextBrief = {
+                        ...nextBrief,
+                        initial_outline: outline,
+                    };
+                }
+
+                try {
+                    await saveBrief(chatId, user.id, nextBrief);
+                } catch (briefError) {
+                    console.error('[First Message] Failed to persist brief:', briefError);
+                }
 
                 // Save assistant message with outline and mark as initial
                 const { error: saveError } = await supabase

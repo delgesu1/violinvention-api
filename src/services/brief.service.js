@@ -6,20 +6,6 @@ const { supabase } = require('../config/supabase');
  * at fixed token cost instead of exponentially growing with previous_response_id
  */
 
-// Wire format for minimal token usage
-// Converts long field names to short keys to save tokens
-const toWire = (brief) => {
-  const w = {
-    g: brief.goal || "",           // goal -> g
-    c: brief.constraints || [],    // constraints -> c
-    d: brief.decisions || [],      // decisions -> d
-    oq: brief.open_q || [],        // open_questions -> oq
-    t: brief.techniques || [],     // violin techniques covered
-    lc: brief.lesson_context || "" // current lesson focus
-  };
-  return JSON.stringify(w);
-};
-
 // Approximate token counting (can replace with tiktoken later if needed)
 // Uses 4 chars per token heuristic which is accurate enough for budget control
 const approxTokens = (s) => {
@@ -52,16 +38,104 @@ const clampStrTokens = (s, maxTok) => {
 // Token budget for briefs - keeps context manageable
 const TOKEN_BUDGET = 200;
 
+const DEFAULT_SUMMARY = {
+  goal: "",
+  constraints: [],
+  decisions: [],
+  open_q: [],
+  techniques: [],
+  lesson_context: "",
+};
+
+const DEFAULT_BRIEF = {
+  summary: { ...DEFAULT_SUMMARY },
+  memory_cards: [],
+  initial_outline: "",
+};
+
+const normalizeSummary = (raw = {}) => {
+  if (typeof raw !== 'object' || raw === null) {
+    return { ...DEFAULT_SUMMARY };
+  }
+
+  return {
+    goal: raw.goal || "",
+    constraints: Array.isArray(raw.constraints) ? raw.constraints : [],
+    decisions: Array.isArray(raw.decisions) ? raw.decisions : [],
+    open_q: Array.isArray(raw.open_q) ? raw.open_q : [],
+    techniques: Array.isArray(raw.techniques) ? raw.techniques : [],
+    lesson_context: raw.lesson_context || "",
+  };
+};
+
+const normalizeBrief = (raw) => {
+  if (!raw || typeof raw !== 'object') {
+    return { ...DEFAULT_BRIEF, summary: { ...DEFAULT_SUMMARY } };
+  }
+
+  // Backward compatibility: old briefs stored summary fields at root level
+  const hasLegacyShape = ['goal', 'constraints', 'decisions', 'open_q', 'techniques', 'lesson_context'].some(
+    (key) => Object.prototype.hasOwnProperty.call(raw, key)
+  );
+
+  const summary = hasLegacyShape ? normalizeSummary(raw) : normalizeSummary(raw.summary);
+
+  const memoryCards = Array.isArray(raw.memory_cards)
+    ? clampArr(raw.memory_cards.filter((card) => card && typeof card === 'object'), 6)
+    : [];
+
+  const initialOutline = typeof raw.initial_outline === 'string' ? raw.initial_outline : "";
+
+  return {
+    summary,
+    memory_cards: memoryCards,
+    initial_outline: initialOutline,
+  };
+};
+
+const toWireSummary = (summary) => {
+  const norm = normalizeSummary(summary);
+  return {
+    g: norm.goal || "",
+    c: norm.constraints || [],
+    d: norm.decisions || [],
+    oq: norm.open_q || [],
+    t: norm.techniques || [],
+    lc: norm.lesson_context || "",
+  };
+};
+
+const toWireMemoryCard = (card = {}) => ({
+  g: card.goal || "",
+  c: Array.isArray(card.constraints) ? card.constraints : [],
+  d: Array.isArray(card.decisions) ? card.decisions : [],
+  oq: Array.isArray(card.open_q) ? card.open_q : [],
+  t: Array.isArray(card.techniques) ? card.techniques : [],
+  lc: card.lesson_context || "",
+});
+
+const toWire = (brief) => {
+  const normalized = normalizeBrief(brief);
+  return JSON.stringify({
+    s: toWireSummary(normalized.summary),
+    mc: normalized.memory_cards.map(toWireMemoryCard),
+  });
+};
+
 /**
- * Update brief with new memory card information
+ * Update brief with new memory card information while keeping recent history.
  * Implements guaranteed termination and deterministic shrinking
  * @param {Object} oldBrief - Existing brief object
  * @param {Object} memoryCard - New information from AI response
  * @returns {Object} Updated brief within token budget
  */
 const updateBrief = (oldBrief, memoryCard) => {
-  // Start with merged data
-  let updated = { ...oldBrief, ...memoryCard };
+  const normalized = normalizeBrief(oldBrief);
+
+  const summary = normalizeSummary(normalized.summary);
+
+  const mergedCard = memoryCard && typeof memoryCard === 'object' ? memoryCard : {};
+  let updated = { ...summary, ...mergedCard };
 
   // Apply per-field caps first (prevents most overflows)
   // Violin-specific field limits based on typical usage
@@ -94,7 +168,7 @@ const updateBrief = (oldBrief, memoryCard) => {
   }
 
   // Absolute hard stop - nuclear option with correct key format
-  if (approxTokens(toWire(updated)) > TOKEN_BUDGET) {
+  if (approxTokens(JSON.stringify(toWireSummary(updated))) > TOKEN_BUDGET) {
     // Use LONG keys (will be shortened in toWire)
     updated = {
       goal: "Conversation",
@@ -106,7 +180,13 @@ const updateBrief = (oldBrief, memoryCard) => {
     };
   }
 
-  return updated;
+  const updatedCards = clampArr([...normalized.memory_cards, mergedCard], 6);
+
+  return {
+    summary: updated,
+    memory_cards: updatedCards,
+    initial_outline: normalized.initial_outline,
+  };
 };
 
 /**
@@ -123,7 +203,7 @@ const getBrief = async (chat_id) => {
       .single();
 
     if (data && data.brief) {
-      return data.brief;
+      return normalizeBrief(data.brief);
     }
 
     if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
@@ -134,14 +214,7 @@ const getBrief = async (chat_id) => {
   }
 
   // Return default brief structure for new chats
-  return {
-    goal: "",
-    constraints: [],
-    decisions: [],
-    open_q: [],
-    techniques: [],
-    lesson_context: ""
-  };
+  return { ...DEFAULT_BRIEF, summary: { ...DEFAULT_SUMMARY } };
 };
 
 /**
