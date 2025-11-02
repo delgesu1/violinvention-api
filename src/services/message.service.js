@@ -304,20 +304,28 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
             segments.push(`Conversation context: ${wireBrief}`);
         }
 
-        // 2. Add initial outline if contentful
-        if (useInitial && outlinesDiffer) {
+        const shouldIncludeInitial = useInitial && outlinesDiffer;
+        const shouldIncludeRecent = useRecent && (outlinesDiffer || !useInitial);
+
+        // 2. Add initial outline when it provides additional context
+        if (shouldIncludeInitial) {
             segments.push(`Initial response outline: ${initialOutline}`);
         }
 
-        // 3. Add recent outline if contentful or if no initial outline
-        if (useRecent && (outlinesDiffer || !useInitial)) {
-            segments.push(`Previous response outline: ${recentOutline}`);
-        } else if (!useRecent && !useInitial && recentOutline) {
-            // Fallback to recent even if not contentful if we have nothing else
+        // 3. Add recent outline when it supplements or replaces the initial outline
+        if (shouldIncludeRecent) {
             segments.push(`Previous response outline: ${recentOutline}`);
         }
 
-        // 4. Add user message and memory instruction
+        // 4. Guarantee at least one outline is present when available
+        if (!shouldIncludeInitial && !shouldIncludeRecent) {
+            const fallbackOutline = recentOutline || initialOutline;
+            if (fallbackOutline) {
+                segments.push(`Previous response outline: ${fallbackOutline}`);
+            }
+        }
+
+        // 5. Add user message and memory instruction
         segments.push(userMessageContent);
         segments.push(MEMORY_INSTRUCTION);
 
