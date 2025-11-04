@@ -150,8 +150,8 @@ app.post('/generate', async (req, res) => {
       try {
         // Set content with proper viewport
         await page.setContent(decodedHTML, {
-          waitUntil: 'networkidle',
-          timeout: 8000
+          waitUntil: 'networkidle0',
+          timeout: 15000
         });
 
         // Set viewport for consistent rendering
@@ -164,13 +164,13 @@ app.post('/generate', async (req, res) => {
         const pdfBuffer = await page.pdf({
           format: 'Letter',
           margin: {
-            top: '0.75in',
-            right: '0.75in',
-            bottom: '0.75in',
-            left: '0.75in'
+            top: '0in',
+            right: '0in',
+            bottom: '0in',
+            left: '0in'
           },
           printBackground: true,
-          preferCSSPageSize: false,
+          preferCSSPageSize: true,
           displayHeaderFooter: false
         });
 
