@@ -1,0 +1,361 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-08-31",
+  "description": "Centralized AI prompt configuration for ArcoScribe",
+  "prompts": {
+    "summarization": {
+      "base": {
+        "title": "Practice-Ready Summary Template",
+        "instruction": "# **{{INSTRUMENT_UPPER}} LESSON TRANSCRIPT → PRACTICE-READY SUMMARY**\n\n**Role:** You are synthesizing a {{INSTRUMENT}} lesson into its essential teaching. Create a reference that captures the lesson's core transformations while maintaining immediate practical value and all important details.\n\n## **GUIDING PRINCIPLE**\n\nCreate a document that teaches, not just documents. Every element should help a {{MUSICIAN_TERM}} understand and apply the lesson's insights.\n\n## **STUDENT IDENTIFICATION**\n\n**Critical:** Carefully identify the student's name from the transcript. Look for:\n- Greetings and introductions (\"Hi Sarah\", \"Good morning, David\")\n- Direct address during instruction (\"Michael, try this passage again\")\n- Any mention of the student's name in conversation\n- References in scheduling or lesson context\n\nThe student's name, if found, must be included in the \"This Lesson\" section.\n\n---\n\n## **OUTPUT SPECIFICATIONS**\n\n- **Format:** Clean, scannable markdown with strategic white space\n- **Length:** 400-650 words (allow breathing room for clarity)\n- **Structure:** Begin with brief \"This Lesson\" coverage list, then let content reveal its natural organization\n- **Voice:** Direct, active. Preserve teacher's key phrases naturally integrated\n\n---\n\n## **MARKDOWN FORMATTING REQUIREMENTS**\n\n**You MUST format your response using proper markdown syntax:**\n- Use `##` for main section headers (e.g., `## Making the Bow Lead`)\n- Use `###` for subsection headers if needed\n- Use `**text**` for bold emphasis on key concepts\n- Use `*text*` for italic emphasis on subtle points\n- Use `-` for bullet points in lists\n- Leave blank lines between paragraphs for readability\n- Use `---` for horizontal rules between major sections if appropriate\n\n---\n\n## **REQUIRED OPENING SECTION**\n\nStart every summary with:\n\n**This Lesson:**\n\n- **If student name identified:** Start with \"Student: [Name]\"\n- List what was worked on (e.g., \"{{WORK_EXAMPLE_1}} — {{WORK_DESCRIPTION_1}}\")\n- Include any exercises, scales, or etudes if covered\n- Add any assignments for next time if mentioned (e.g., \"Next week: Bring {{ASSIGNMENT_EXAMPLE}}\" or \"Prepare {{SCALE_ASSIGNMENT}}\")\n- Keep entries brief and factual—no commentary on quality or focus\n\nFormat examples:\n\n- {{WORK_EXAMPLE_2}}\n- {{SCALE_EXAMPLE}}\n- {{ETUDE_EXAMPLE}}\n- Next lesson: Prepare {{ASSIGNMENT_EXAMPLE_2}}\n\n---\n\n## **SYNTHESIS APPROACH**\n\n### **First Pass: Find the Core**\n\nWhat 2-3 transformative concepts dominated this lesson? These become your organizing principles. Look for:\n\n- Moments where understanding shifted\n- Concepts the teacher returned to repeatedly\n- Breakthroughs that unlocked other improvements\n\n### **Second Pass: Let Structure Emerge**\n\nRather than forcing predetermined sections, allow the lesson's natural arc to suggest organization. Consider:\n\n- **What wants to be said first?** Often this is the governing principle or mindset shift\n- **How do concepts naturally cluster?** Group ideas that illuminate each other\n- **What sequence would best serve learning?** Usually: understanding → application → retention\n\n**Section titles should feel inevitable, not categorical.**  Instead of \"{{GENERIC_TECHNIQUE_REFERENCE}},\" write what that technique achieves: \"{{TECHNIQUE_EXAMPLE_1}}\" or \"{{TECHNIQUE_EXAMPLE_2}}.\" Let headers teach, not just label.\n\n### **Writing Principles**\n\n**Hierarchy over exhaustiveness:** Better to fully explain 3 core concepts than list 10 superficially.\n\n**Integration over separation:** If {{TECHNIQUE_LIST}} serve the same expressive goal, discuss them together.\n\n**Essence over inventory:** Include specific {{TECHNICAL_DETAILS}} only when they illuminate a principle or solve a key problem.\n\n**Context over universal rules:** When the teacher addresses specific passages, preserve that specificity. If they say \"make an audible hump here,\" don't extend that to all similar situations unless they explicitly do so. Note when solutions are passage-specific versus general principles.\n\n**Natural language:** Write as if explaining to an intelligent colleague, not filling out a form. Include the teacher's personality—their humor, metaphors, or unique expressions that make concepts memorable.\n\n**Strategic formatting:**\n\n- Use bold/italic sparingly for scanning and emphasis\n- Leave white space between major ideas to let concepts breathe\n- Short paragraphs are good; many single sentences are fine (max 3 sentences)\n- Use bullet points only when listing genuinely separate items, not for continuing thoughts\n\n**Warmth over clinical precision:** Maintain the human teaching relationship. If the teacher used encouraging language or celebrated a breakthrough, let that energy live in the summary.\n\n---\n\n## **QUALITY FILTERS**\n\nBefore finalizing, ask:\n\n1. **Could someone who wasn't at the lesson understand and apply this?**\n2. **Does the document flow naturally from concept to application?**\n3. **Have I preserved the teacher's most memorable/unique language?**\n4. **Is every section genuinely useful in the {{PRACTICE_CONTEXT}}?**\n5. **Have I resisted the urge to include everything?**\n6. **Do the section headers emerge naturally from the content?**\n7. **Does it feel like teaching rather than documentation?**\n\n---\n\n## **WHAT TO EXCLUDE**\n\n- Repetitive explanations of the same concept\n- Generic advice that lacks specific details\n- Assumptions and synthesis that likely isn't true\n- Exhaustive technical details that obscure the main teaching points\n- Filler phrases or transitions that don't add meaning\n\n---\n\n## **SPECIAL CASES**\n\n**Multi-piece lessons:** Find unifying principles; note piece-specific applications inline\n\n**Problem-solving focused:** Lead with the solution discovered, then context\n\n**Philosophy-heavy:** Extract one concrete practice application for each concept\n\n**Breakthrough moments:** When something clicks, capture both what changed and how it felt\n\n---\n\n**Remember:** You're creating a learning tool, not a transcript. Every word should either clarify understanding or enable practice. Trust the content to reveal its own best organization. The summary should feel like the lesson's wisdom distilled, not compressed.\n\n## Here is the raw transcript:"
+      },
+      "instruments": {
+        "violin": {
+          "displayName": "Violin",
+          "instrumentUpper": "VIOLIN",
+          "musicianTerm": "violinist",
+          "technicalDetails": "fingerings and bowings",
+          "genericTechniqueReference": "Right-Hand Technique",
+          "practiceContext": "practice room",
+          "workExample1": "Wieniawski Concerto No. 2, mvt I",
+          "workDescription1": "opening through early lyrical sections",
+          "assignmentExample": "Brahms Concerto, mvt 2",
+          "scaleAssignment": "scales in thirds",
+          "workExample2": "Brahms Concerto, mvt 1 — development section",
+          "scaleExample": "Three-octave scales: G, A, B♭ major (Carl Flesch Book, focus on I-V for each key)",
+          "etudeExample": "Kreutzer Etude No. 12 — intonation focus",
+          "assignmentExample2": "Bach Fugue and Rode Etude No.21",
+          "techniqueExample1": "Make the Bow Lead",
+          "techniqueExample2": "Shaping Sound Through the Bow",
+          "techniqueList": "vibrato, shifts, and bow changes"
+        },
+        "viola": {
+          "displayName": "Viola",
+          "instrumentUpper": "VIOLA",
+          "musicianTerm": "violist",
+          "technicalDetails": "fingerings and bowings",
+          "genericTechniqueReference": "Right-Hand Technique",
+          "practiceContext": "practice room",
+          "workExample1": "Hindemith Sonata Op. 11 No. 4",
+          "workDescription1": "opening movement themes",
+          "assignmentExample": "Walton Concerto, 1st movement",
+          "scaleAssignment": "scales in thirds",
+          "workExample2": "Bach Cello Suite No. 1 arr. for viola — Prelude focus",
+          "scaleExample": "Two-octave scales: G, D, A major with shifting patterns",
+          "etudeExample": "Campagnoli Etude No. 7 — string crossings",
+          "assignmentExample2": "Hoffmeister studies and Bartok Concerto excerpts",
+          "techniqueExample1": "Make the Bow Lead",
+          "techniqueExample2": "Shaping Sound Through the Bow",
+          "techniqueList": "vibrato, shifts, and bow changes"
+        },
+        "cello": {
+          "displayName": "Cello",
+          "instrumentUpper": "CELLO",
+          "musicianTerm": "cellist",
+          "technicalDetails": "fingerings and bowings",
+          "genericTechniqueReference": "Right-Hand Technique",
+          "practiceContext": "practice room",
+          "workExample1": "Bach Cello Suite No. 1 in G major",
+          "workDescription1": "Prelude and Allemande movements",
+          "assignmentExample": "Dvorak Concerto, 1st movement",
+          "scaleAssignment": "2-octave scales with shifting",
+          "workExample2": "Haydn Concerto in C major — opening theme and development",
+          "scaleExample": "D major scale, 2 octaves, focus on thumb position transitions",
+          "etudeExample": "Popper Etude No. 15 — thumb position work",
+          "assignmentExample2": "Dotzauer Book 1 studies and Saint-Saens Concerto",
+          "techniqueExample1": "Mastering Thumb Position",
+          "techniqueExample2": "Bow Distribution and Weight",
+          "techniqueList": "thumb position, string crossings, and bow angles"
+        },
+        "piano": {
+          "displayName": "Piano",
+          "instrumentUpper": "PIANO",
+          "musicianTerm": "pianist",
+          "technicalDetails": "fingerings and pedalings",
+          "genericTechniqueReference": "Hand Technique",
+          "practiceContext": "practice room",
+          "workExample1": "Mozart Sonata K.331, 1st movement",
+          "workDescription1": "exposition and development sections",
+          "assignmentExample": "Chopin Nocturne Op. 9 No. 2",
+          "scaleAssignment": "scales with proper fingerings",
+          "workExample2": "Bach Invention No. 4 in D minor — counterpoint clarity",
+          "scaleExample": "C major scale, hands separately, focus on thumb crossings and evenness",
+          "etudeExample": "Czerny Op. 740 No. 11 — finger independence",
+          "assignmentExample2": "Hanon No. 1-5 and Clementi Sonatina",
+          "techniqueExample1": "Voicing the Melody Line",
+          "techniqueExample2": "Pedal Control for Resonance",
+          "techniqueList": "voicing, pedaling, and hand independence"
+        },
+        "guitar": {
+          "displayName": "Guitar",
+          "instrumentUpper": "GUITAR",
+          "musicianTerm": "guitarist",
+          "technicalDetails": "fingerings and picking patterns",
+          "genericTechniqueReference": "Right-Hand Technique",
+          "practiceContext": "practice room",
+          "workExample1": "Villa-Lobos Etude No. 1",
+          "workDescription1": "opening arpeggiated sections",
+          "assignmentExample": "Sor Study Op. 60 No. 3",
+          "scaleAssignment": "scales in different positions",
+          "workExample2": "Fernando Sor Sonata Op. 22 — first movement themes",
+          "scaleExample": "C major scale in 5th position, focus on fingering consistency",
+          "etudeExample": "Carcassi Etude Op. 60 No. 7 — legato and phrasing",
+          "assignmentExample2": "Giuliani studies and Tarrega Recuerdos excerpts",
+          "techniqueExample1": "Master Fingerpicking Patterns",
+          "techniqueExample2": "Voicing and Balance in Chords",
+          "techniqueList": "fingerpicking, barre chords, and position playing"
+        },
+        "flute": {
+          "displayName": "Flute",
+          "instrumentUpper": "FLUTE",
+          "musicianTerm": "flutist",
+          "technicalDetails": "fingerings and articulations",
+          "genericTechniqueReference": "Breathing Technique",
+          "practiceContext": "practice room",
+          "workExample1": "Mozart Flute Concerto in G major, K. 313",
+          "workDescription1": "first movement opening themes",
+          "assignmentExample": "Bach Sonata in A minor, BWV 1013",
+          "scaleAssignment": "scales with breath management",
+          "workExample2": "Poulenc Flute Sonata — lyrical second movement",
+          "scaleExample": "D major scale, 2 octaves, focus on evenness and tone consistency",
+          "etudeExample": "Taffanel & Gaubert Etude No. 3 — articulation patterns",
+          "assignmentExample2": "Moyse tone exercises and Anderson studies",
+          "techniqueExample1": "Developing Embouchure Control",
+          "techniqueExample2": "Breath Support and Phrasing",
+          "techniqueList": "embouchure, breath support, and articulation"
+        },
+        "voice": {
+          "displayName": "Voice",
+          "instrumentUpper": "VOICE",
+          "musicianTerm": "singer",
+          "technicalDetails": "breath work and diction",
+          "genericTechniqueReference": "Vocal Technique",
+          "practiceContext": "practice sessions",
+          "workExample1": "Schubert's \"Gretchen am Spinnrade\"",
+          "workDescription1": "dramatic passages and spinning wheel motif",
+          "assignmentExample": "Mozart's \"Dove sono\" from Figaro",
+          "scaleAssignment": "vocalises with breath support",
+          "workExample2": "Schumann's \"Widmung\" — lyrical phrasing and dynamics",
+          "scaleExample": "Five-note scales (sol-fa exercises) focusing on vowel consistency",
+          "etudeExample": "Vaccai Exercise No. 5 — legato and interval work",
+          "assignmentExample2": "Concone studies and Puccini aria preparation",
+          "techniqueExample1": "Developing Breath Support",
+          "techniqueExample2": "Vocal Placement and Resonance",
+          "techniqueList": "breath support, vocal placement, and register transitions"
+        },
+        "other": {
+          "displayName": "Other Instrument",
+          "instrumentUpper": "OTHER INSTRUMENT",
+          "musicianTerm": "musician",
+          "technicalDetails": "technique and musicality",
+          "genericTechniqueReference": "Technique",
+          "practiceContext": "practice",
+          "workExample1": "Current repertoire piece",
+          "workDescription1": "key sections and passages",
+          "assignmentExample": "assigned repertoire",
+          "scaleAssignment": "technical exercises",
+          "workExample2": "Practice material — focus areas for improvement",
+          "scaleExample": "Technical exercises with attention to accuracy and consistency",
+          "etudeExample": "Study material — specific technical challenges",
+          "assignmentExample2": "Method book exercises and repertoire preparation",
+          "techniqueExample1": "Core Technique Focus",
+          "techniqueExample2": "Musical Expression and Interpretation",
+          "techniqueList": "fundamental techniques and musical expression"
+        }
+      },
+      "genres": {
+        "classical": {
+          "displayName": "Classical",
+          "piecesTerms": "pieces and composers",
+          "terminologyScope": "composer names, {{INSTRUMENT}} techniques, and music-related terminology",
+          "referenceExamples": "\"Bar 50\", \"1st Movement\", \"in the last line\"",
+          "titleVars": {
+            "labelType": "pieces or technical topics",
+            "singularLabel": "piece or composer",
+            "pluralLabel": "pieces",
+            "labelFormat": "(e.g., just the composer's surname, or 'Rode 12', 'Kreutzer 23', 'Tchaikovsky')",
+            "exampleFormat": "(e.g., 'Tchaikovsky, Rode 12, String Crossings')",
+            "techniqueExamples": "(e.g., 'Bow hold', 'Spiccato')"
+          },
+          "tagVars": {
+            "repertoireType": "pieces",
+            "repertoireDescription": "repertoire",
+            "techniqueContext": "techniques",
+            "pedagogicalTerms": "pedagogical terms",
+            "educatorTerm": "educators",
+            "techniqueTerminology": "technique terms",
+            "techniqueExamples": "  - Examples: \"Spiccato\", \"Staccato\", \"Martelé\", \"Intonation\", \"Phrasing\"\n  - Prefer standard terminology over descriptive phrases. Map specifics to general pedagogical concepts where possible.",
+            "repertoireInstructions": "Identify works with clear composer attribution. Create SEPARATE tags for each distinct piece. Include opus numbers when provided.",
+            "repertoireExamples": "  - Examples: \"Bach Partita No. 2 in D minor\", \"Kreutzer Etude 12\", \"Mozart Sonata K.331\""
+          }
+        },
+        "jazz": {
+          "displayName": "Jazz", 
+          "piecesTerms": "songs and arrangements",
+          "terminologyScope": "artist names, {{INSTRUMENT}} techniques, chord progressions, and jazz terminology",
+          "referenceExamples": "\"Chorus 3\", \"Bridge section\", \"after the solo\"",
+          "titleVars": {
+            "labelType": "songs, arrangements, or technical topics",
+            "singularLabel": "song or artist",
+            "pluralLabel": "songs",
+            "labelFormat": "(e.g., 'Bill Evans', 'Giant Steps', 'Autumn Leaves')",
+            "exampleFormat": "(e.g., 'Bill Evans, Giant Steps, Swing Feel')",
+            "techniqueExamples": "(e.g., 'Comping', 'Walking Bass')"
+          },
+          "tagVars": {
+            "repertoireType": "songs and arrangements",
+            "repertoireDescription": "jazz standards and arrangements",
+            "techniqueContext": "performance techniques",
+            "pedagogicalTerms": "jazz techniques",
+            "educatorTerm": "instructors",
+            "techniqueTerminology": "jazz terminology",
+            "techniqueExamples": "  - Examples: \"Comping\", \"Walking Bass\", \"Swing Feel\", \"Bebop Lines\", \"Chord Voicings\"\n  - Include both traditional and modern jazz techniques",
+            "repertoireInstructions": "Identify jazz standards, arrangements, and significant recordings mentioned. Create SEPARATE tags for each distinct piece.",
+            "repertoireExamples": "  - Examples: \"Giant Steps\", \"Autumn Leaves\", \"All The Things You Are\", \"Bill Evans arrangements\""
+          }
+        },
+        "folk": {
+          "displayName": "Folk/Traditional",
+          "piecesTerms": "tunes and traditional pieces", 
+          "terminologyScope": "tune names, {{INSTRUMENT}} techniques, and traditional music terminology",
+          "referenceExamples": "\"First verse\", \"Refrain\", \"traditional variation\"",
+          "titleVars": {
+            "labelType": "tunes or technical topics",
+            "singularLabel": "tune or traditional piece",
+            "pluralLabel": "tunes",
+            "labelFormat": "(e.g., 'Irish Jig', 'Scarborough Fair', 'Bluegrass')",
+            "exampleFormat": "(e.g., 'Irish Jig, Ornamentation, Traditional Bowing')",
+            "techniqueExamples": "(e.g., 'Ornamentation', 'Traditional Patterns')"
+          },
+          "tagVars": {
+            "repertoireType": "tunes and songs",
+            "repertoireDescription": "traditional and folk music",
+            "techniqueContext": "traditional techniques",
+            "pedagogicalTerms": "folk techniques",
+            "educatorTerm": "teachers",
+            "techniqueTerminology": "traditional terminology",
+            "techniqueExamples": "  - Examples: \"Ornamentation\", \"Drone\", \"Modal Playing\", \"Traditional Bowing\", \"Clog Dancing\"\n  - Include region-specific techniques when applicable",
+            "repertoireInstructions": "Identify traditional tunes, folk songs, and their regional origins when known. Create SEPARATE tags for each distinct piece.",
+            "repertoireExamples": "  - Examples: \"Scarborough Fair\", \"Danny Boy\", \"Cotton-Eyed Joe\", \"Ashokan Farewell\""
+          }
+        },
+        "pop": {
+          "displayName": "Pop",
+          "piecesTerms": "songs and artists",
+          "terminologyScope": "artist names, {{INSTRUMENT}} techniques, and pop music terminology", 
+          "referenceExamples": "\"Verse 2\", \"Chorus\", \"Bridge section\"",
+          "titleVars": {
+            "labelType": "songs or technical topics",
+            "singularLabel": "song or artist",
+            "pluralLabel": "songs",
+            "labelFormat": "(e.g., 'Beatles', 'Yesterday', 'Ed Sheeran')",
+            "exampleFormat": "(e.g., 'Beatles, Yesterday, Strumming Patterns')",
+            "techniqueExamples": "(e.g., 'Rhythm', 'Chord Progressions')"
+          },
+          "tagVars": {
+            "repertoireType": "songs",
+            "repertoireDescription": "popular songs",
+            "techniqueContext": "performance techniques",
+            "pedagogicalTerms": "performance techniques",
+            "educatorTerm": "instructors",
+            "techniqueTerminology": "contemporary techniques",
+            "techniqueExamples": "  - Examples: \"Rhythm Patterns\", \"Chord Progressions\", \"Vocal Runs\", \"Groove\", \"Pop Styling\"\n  - Focus on commercially relevant techniques",
+            "repertoireInstructions": "Identify songs and artists, including current hits and classics. Create SEPARATE tags for each distinct song.",
+            "repertoireExamples": "  - Examples: \"Shape of You - Ed Sheeran\", \"Yesterday - Beatles\", \"Shallow - Lady Gaga\""
+          }
+        },
+        "rock": {
+          "displayName": "Rock",
+          "piecesTerms": "songs and bands",
+          "terminologyScope": "band names, {{INSTRUMENT}} techniques, and rock music terminology",
+          "referenceExamples": "\"Intro riff\", \"Guitar solo\", \"Final chorus\"",
+          "titleVars": {
+            "labelType": "songs or technical topics",
+            "singularLabel": "song or band",
+            "pluralLabel": "songs",
+            "labelFormat": "(e.g., 'Led Zeppelin', 'Stairway', 'AC/DC')",
+            "exampleFormat": "(e.g., 'Led Zeppelin, Power Chords, Palm Muting')",
+            "techniqueExamples": "(e.g., 'Riffs', 'Distortion Techniques')"
+          },
+          "tagVars": {
+            "repertoireType": "songs",
+            "repertoireDescription": "rock songs and classic tracks",
+            "techniqueContext": "rock techniques",
+            "pedagogicalTerms": "rock techniques",
+            "educatorTerm": "instructors",
+            "techniqueTerminology": "rock terminology",
+            "techniqueExamples": "  - Examples: \"Power Chords\", \"Palm Muting\", \"Distortion\", \"Riffs\", \"Solos\", \"Drop Tuning\"\n  - Include both rhythm and lead techniques",
+            "repertoireInstructions": "Identify songs, bands, and iconic rock pieces mentioned. Create SEPARATE tags for each distinct song.",
+            "repertoireExamples": "  - Examples: \"Stairway to Heaven - Led Zeppelin\", \"Sweet Child O' Mine - Guns N' Roses\", \"Enter Sandman - Metallica\""
+          }
+        },
+        "other": {
+          "displayName": "Other Genre",
+          "piecesTerms": "musical pieces",
+          "terminologyScope": "{{INSTRUMENT}} techniques and music-related terminology",
+          "referenceExamples": "specific sections or moments",
+          "titleVars": {
+            "labelType": "pieces or technical topics",
+            "singularLabel": "piece",
+            "pluralLabel": "pieces",
+            "labelFormat": "",
+            "exampleFormat": "",
+            "techniqueExamples": ""
+          },
+          "tagVars": {
+            "repertoireType": "pieces",
+            "repertoireDescription": "musical pieces",
+            "techniqueContext": "techniques",
+            "pedagogicalTerms": "technical terms",
+            "educatorTerm": "teachers",
+            "techniqueTerminology": "technique terms",
+            "techniqueExamples": "",
+            "repertoireInstructions": "Identify any musical pieces or works mentioned. Create SEPARATE tags for each distinct piece.",
+            "repertoireExamples": ""
+          }
+        }
+      }
+    },
+    "titleGeneration": {
+      "base": "Your task: from the given {{INSTRUMENT}} lesson summary, output ONE concise line that best names the {{LABEL_TYPE}} covered.\n\nGuidelines:\n- Use only the shortest possible label for each {{SINGULAR_LABEL}} mentioned {{LABEL_FORMAT}}.\n- Do NOT include details about what was done with each {{SINGULAR_LABEL}} (e.g., do not include 'fast passages', 'octaves', etc. after the {{SINGULAR_LABEL}} name).\n- If multiple items, separate with commas {{EXAMPLE_FORMAT}}.\n- If no {{PLURAL_LABEL}} are mentioned, summarize the main technical topics in a few words {{TECHNIQUE_EXAMPLES}}.\n- No complete sentences, avoid filler words.",
+      "withStudent": "IMPORTANT: Start the title with \"{{STUDENT_NAME}}:\" followed by the content.\nExample: If the student is \"Dana\" and the lesson covers vibrato and Mozart, output: \"Dana: Vibrato, Mozart\""
+    },
+    "tagExtraction": {
+      "base": "# Role and Objective\nIdentify the student's full name from a {{INSTRUMENT}} lesson summary.\n\n# Instructions\n1. Read the entire summary, including greetings, side remarks, and closing statements.\n2. Extract the exact student name if it appears anywhere in the summary.\n3. Preserve multi-word names exactly as written.\n4. If multiple possible names appear, choose the one explicitly referenced as the student.\n5. If no student name is present, return null.\n\n# Output Format\nReturn **only** a single-line JSON object using double quotes:\n{\"student\":\"Full Name\"}\nIf no student is mentioned, output:\n{\"student\":null}\n\n# Validation\n- Do not invent placeholder text like \"Unknown\" or \"Student\".\n- Do not add extra whitespace, keys, or prose around the JSON.\n- Double-check that the JSON is valid before returning it.",
+      "legacyBase": "# Role and Objective\nExtract key metadata tags from a {{INSTRUMENT}} lesson summary, with emphasis on identifying the student name, core techniques addressed, and {{REPERTOIRE_TYPE}} worked on.\n\n# Instructions\nFocus on extracting from the summary the most significant tag (STUDENT NAME), widely recognized {{INSTRUMENT}} {{TECHNIQUE_CONTEXT}}, and specific {{REPERTOIRE_DESCRIPTION}} featured in the lesson.\n\n## Tag Extraction Guidelines\n- **STUDENT:** Extract if directly available (e.g., \"Sarah\", \"David\"). NEVER create tags with placeholder values like \"Not Specified\", \"Unknown\", \"N/A\", or similar. If no student name is found, omit the STUDENT tag entirely.\n\n- **TECHNIQUE:** Identify standard {{INSTRUMENT}} {{PEDAGOGICAL_TERMS}} discussed in the summary. Create SEPARATE tags for each distinct technique. Each tag should be concise, well-recognized by {{INSTRUMENT}} {{EDUCATOR_TERM}}, and map lesson details to established {{TECHNIQUE_TERMINOLOGY}}.\n{{TECHNIQUE_EXAMPLES}}\n\n- **REPERTOIRE:** {{REPERTOIRE_INSTRUCTIONS}}\n{{REPERTOIRE_EXAMPLES}}\n\n# Output Format\nReturn tags in the following format:\nSTUDENT: ActualName\nTECHNIQUE: Technique1\nTECHNIQUE: Technique2\nREPERTOIRE: Piece1\nREPERTOIRE: Composer2\n\n# General Guidelines\n- Keep all tag values concise and clearly stated.\n- Use canonical spelling for composers and repertoire.\n- Limit total tags to 10 per summary.\n- Favor the most significant and frequently discussed lesson elements.\n\n# Post-extraction Validation\nAfter identifying tags, briefly validate that all guidelines and output format requirements are met. If not, self-correct before returning the final output.",
+      "instrumentSpecific": {
+        "violin": {
+          "commonTechniques": ["Spiccato", "Martelé", "Sul Tasto", "Sul Ponticello", "Vibrato", "Shifting", "String Crossings", "Bow Hold", "Intonation", "Double Stops", "Harmonics", "Pizzicato"],
+          "etudeSeries": ["Kreutzer", "Rode", "Dont", "Fiorillo", "Sevcik", "Wohlfahrt"]
+        },
+        "viola": {
+          "commonTechniques": ["Bow Weight", "Intonation", "Alto Clef", "String Crossings", "Vibrato", "Shifting", "Bow Technique"],
+          "etudeSeries": ["Kreutzer", "Campagnoli", "Dont", "Hoffmeister"]
+        },
+        "cello": {
+          "commonTechniques": ["Thumb Position", "Bow Angles", "Vibrato", "Shifting", "String Crossings", "Endpin Position", "Bow Grip"],
+          "etudeSeries": ["Popper", "Dotzauer", "Lee", "Duport"]
+        },
+        "piano": {
+          "commonTechniques": ["Legato", "Staccato", "Pedaling", "Voicing", "Hand Independence", "Finger Technique", "Dynamics", "Articulation", "Scales", "Arpeggios"],
+          "etudeSeries": ["Czerny", "Chopin Etudes", "Hanon", "Clementi"]
+        },
+        "guitar": {
+          "commonTechniques": ["Fingerpicking", "Strumming", "Bending", "Hammer-on", "Pull-off", "Barre Chords", "Slides", "Vibrato"],
+          "etudeSeries": ["Sor", "Giuliani", "Carcassi", "Villa-Lobos"]
+        },
+        "flute": {
+          "commonTechniques": ["Embouchure", "Breath Support", "Tone Production", "Articulation", "Vibrato", "Fingerings"],
+          "etudeSeries": ["Taffanel", "Anderson", "Moyse", "Berbiguier"]
+        },
+        "voice": {
+          "commonTechniques": ["Breath Support", "Vocal Placement", "Resonance", "Articulation", "Vibrato", "Register Transitions", "Vowel Modification"],
+          "etudeSeries": ["Vaccai", "Concone", "Marchesi", "Panofka"]
+        },
+        "other": {
+          "commonTechniques": ["Technique", "Tone Production", "Articulation", "Dynamics", "Expression"],
+          "etudeSeries": []
+        }
+      }
+    }
+  }
+}

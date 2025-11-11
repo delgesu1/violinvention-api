@@ -153,6 +153,13 @@ ${transcript}`;
     purpose: 'assistants'
   });
 
+  const studentTags = Array.isArray(metadata.tags)
+    ? metadata.tags.filter((tag) => tag?.category === 'student')
+    : [];
+  const legacyTags = Array.isArray(metadata.all_tags)
+    ? metadata.all_tags
+    : metadata.tags;
+
   // Step 2: Add file to vector store with attributes (metadata for filtering/display)
   const vectorStoreFile = await openaiClient.vectorStores.files.create(
     vectorStoreId,
@@ -163,7 +170,8 @@ ${transcript}`;
         title: metadata.title || '',
         date: metadata.date || '',
         student_name: metadata.student_name || '',
-        tags: JSON.stringify(metadata.tags || [])
+        tags: JSON.stringify(studentTags),
+        ...(legacyTags ? { all_tags: JSON.stringify(legacyTags) } : {})
       },
       chunking_strategy: {
         type: 'auto'

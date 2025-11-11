@@ -6,6 +6,7 @@ const allRoles = {
     'uploadLesson',
     'deleteLesson',
     'searchVectorStore',
+    'processRecording',
   ],
   admin: [
     'sendMessage',
@@ -14,6 +15,7 @@ const allRoles = {
     'uploadLesson',
     'deleteLesson',
     'searchVectorStore',
+    'processRecording',
     'getUsers',
     'manageUsers',
   ],

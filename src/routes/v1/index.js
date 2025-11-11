@@ -7,6 +7,7 @@ const messageRoute = require('./message.route');
 const pdfRoute = require('./pdf.route');
 const vectorStoreRoute = require('./vectorStore.route');
 const healthRoute = require('./health.route');
+const recordingRoute = require('./recording.route');
 const docsRoute = require('./docs.route');
 const config = require('../../config/config');
 
@@ -37,6 +38,10 @@ const defaultRoutes = [
   {
     path: '/vector_store',
     route: vectorStoreRoute,
+  },
+  {
+    path: '/recordings',
+    route: recordingRoute,
   },
   {
     path: '/health',
