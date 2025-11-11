@@ -9,7 +9,11 @@ const uploadLesson = {
       title: Joi.string().optional().allow(''),
       date: Joi.string().optional().allow(''),
       student_name: Joi.string().optional().allow(''),
-      tags: Joi.array().items(Joi.object()).optional()
+      tags: Joi.array().items(Joi.object()).optional(),
+      all_tags: Joi.alternatives().try(
+        Joi.array().items(Joi.object()),
+        Joi.string()
+      ).optional()
     }).required()
   })
 };
