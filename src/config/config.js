@@ -58,7 +58,7 @@ module.exports = {
       key: envVars.OPENAI_API_KEY,
       projectId: envVars.OPENAI_PROJECT_ID, // Required for project-scoped keys
       promptId: envVars.PROMPT_ID || 'pmpt_68a813200634819093ee3c75a18916b00f89c46dc51e879f',
-      promptVersion: envVars.PROMPT_VERSION || '3',
+      promptVersion: envVars.PROMPT_VERSION || '38',
       promptInstructions: envVars.PROMPT_INSTRUCTIONS || null,
       vectorStoreId: envVars.VECTOR_STORE_ID || 'vs_rnnqexe2zwkUBkn5NInfTRt4', // Legacy, kept for migration
       assistantId: envVars.ASSISTANT_ID, // Legacy, kept for migration
