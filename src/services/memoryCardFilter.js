@@ -6,6 +6,8 @@
 function createMemoryCardFilter() {
     const START = "<MEMORY_CARD>";
     const END = "</MEMORY_CARD>";
+    const START_TAIL = Math.max(0, START.length - 1);
+    const END_TAIL = Math.max(0, END.length - 1);
     let mode = "normal";      // "normal" | "capturing"
     let carry = "";           // small tail to detect split tags
     let cardBuf = "";
@@ -20,9 +22,9 @@ function createMemoryCardFilter() {
                 const i = text.indexOf(START);
                 if (i === -1) {
                     // keep a tail so a split START across chunks is detected
-                    const keep = Math.max(0, START.length - 1);
-                    uiOut += text.slice(0, Math.max(0, text.length - keep));
-                    carry = text.slice(Math.max(0, text.length - keep));
+                    const cutoff = Math.max(0, text.length - START_TAIL);
+                    uiOut += text.slice(0, cutoff);
+                    carry = text.slice(cutoff);
                     text = "";
                 } else {
                     uiOut += text.slice(0, i);                 // emit clean text before tag
@@ -35,9 +37,10 @@ function createMemoryCardFilter() {
                 // capturing until END
                 const j = text.indexOf(END);
                 if (j === -1) {
-                    cardBuf += text;
-                    // keep tail to detect split END across chunks
-                    carry = cardBuf.slice(-(END.length - 1));
+                    // Append everything except the tail reserved for END detection
+                    const cutoff = Math.max(0, text.length - END_TAIL);
+                    cardBuf += text.slice(0, cutoff);
+                    carry = text.slice(cutoff);
                     text = "";
 
                     // Safety limit to prevent memory issues with malformed tags
@@ -57,14 +60,24 @@ function createMemoryCardFilter() {
                 }
             }
         }
-        return { ui: uiOut, card: cardDone ? cardBuf.trim() : null };
+        const card = cardDone ? cardBuf.trim() : null;
+        if (cardDone) {
+            cardDone = false;
+            cardBuf = "";
+        }
+        return { ui: uiOut, card };
     }
 
     function flush() {
         // Only leftover normal text is safe to emit; discard partial tags
         const tail = mode === "normal" ? carry : "";
         carry = "";
-        return { ui: tail, card: cardDone ? cardBuf.trim() : null };
+        const card = cardDone ? cardBuf.trim() : null;
+        if (cardDone) {
+            cardDone = false;
+            cardBuf = "";
+        }
+        return { ui: tail, card };
     }
 
     return { feed, flush };

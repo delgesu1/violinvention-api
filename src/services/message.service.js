@@ -47,21 +47,6 @@ const formatResponseEventForFrontend = (responseEvent) => {
     const eventType = responseEvent.type || responseEvent.event;
     
     switch(eventType) {
-        case 'response.output_text.delta':
-        case 'output_text.delta':
-        case 'content.delta':
-            // Map content delta to expected format with MEMORY_CARD filtering
-            const rawText = responseEvent.delta || responseEvent.text || responseEvent.content || '';
-            const { cleanText } = stripMemoryCard(rawText);
-            return JSON.stringify({
-                event: 'content.delta',
-                data: {
-                    id: responseEvent.response?.id || responseEvent.id || 'response',
-                    text: cleanText
-                }
-            }) + '\n';
-
-            
         case 'response.created':
         case 'response.started':
             return JSON.stringify({
