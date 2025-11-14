@@ -67,10 +67,10 @@ module.exports = {
       personalLessonsPromptVersion: envVars.PROMPT_VERSION_PERSONAL_LESSONS || '1',
       personalLessonsPromptInstructions: envVars.PROMPT_INSTRUCTIONS_PERSONAL_LESSONS || null,
       personalLessonsDeepDivePromptId: envVars.PROMPT_ID_PERSONAL_LESSONS_DEEPDIVE || 'pmpt_690723b2773c819393cc4536e64b882c0abf664c9de35b31',
-      personalLessonsDeepDivePromptVersion: envVars.PROMPT_VERSION_PERSONAL_LESSONS_DEEPDIVE || '1',
+      personalLessonsDeepDivePromptVersion: envVars.PROMPT_VERSION_PERSONAL_LESSONS_DEEPDIVE || '2',
       personalLessonsDeepDivePromptInstructions: envVars.PROMPT_INSTRUCTIONS_PERSONAL_LESSONS_DEEPDIVE || null,
       deepThinkPromptId: envVars.PROMPT_ID_DEEPTHINK || 'pmpt_68e6212f66648190b909ceeba3e2b514051a81413723cdec',
-      deepThinkPromptVersion: envVars.PROMPT_VERSION_DEEPTHINK || '2',
+      deepThinkPromptVersion: envVars.PROMPT_VERSION_DEEPTHINK || '3',
       deepThinkPromptInstructions: envVars.PROMPT_INSTRUCTIONS_DEEPTHINK || null,
     },
     botClient:{
