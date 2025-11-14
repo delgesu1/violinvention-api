@@ -25,6 +25,23 @@ const { getBrief, saveBrief, updateBrief, toWire, generateOutline, approxTokens,
 const { createMemoryCardFilter } = require('./memoryCardFilter');
 const { searchVectorStore } = require('./vectorStore.service');
 
+// Helper function to strip citation markers from OpenAI responses
+const stripCitations = (text) => {
+    if (!text) return text;
+
+    // Remove OpenAI citation patterns like: 【citation】, filecite, turn0file5, etc.
+    // These patterns include unicode private use area characters and citation markers
+    return text
+        // Remove 【...】 style citations
+        .replace(/【[^】]*】/g, '')
+        // Remove filecite markers with turn/file references
+        .replace(/[\uE000-\uF8FF]?filecite[\uE000-\uF8FF]?turn\d+file\d+[\uE000-\uF8FF]?/g, '')
+        // Remove any remaining private use area characters (often used for citations)
+        .replace(/[\uE000-\uF8FF]/g, '')
+        // Clean up any extra spaces that might result
+        .replace(/\s{2,}/g, ' ');
+};
+
 // Helper function to extract text from various event shapes
 const getTextDelta = (ev) => {
     return (
@@ -488,8 +505,8 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
             const eventType = event.type || event.event;
 
             if (eventType === 'response.output_text.delta' || eventType === 'output_text.delta' || eventType === 'content.delta') {
-                // Delta events: process through stateful filter
-                const rawText = getTextDelta(event);
+                // Delta events: process through stateful filter and strip citations
+                const rawText = stripCitations(getTextDelta(event));
                 const { ui, card } = filter.feed(rawText);
 
                 if (ui) writeUI(ui);
@@ -1031,8 +1048,8 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
             const eventType = event.type || event.event;
 
             if (eventType === 'response.output_text.delta' || eventType === 'output_text.delta' || eventType === 'content.delta') {
-                // Delta events: process through stateful filter
-                const rawText = getTextDelta(event);
+                // Delta events: process through stateful filter and strip citations
+                const rawText = stripCitations(getTextDelta(event));
                 const { ui, card } = filter.feed(rawText);
 
                 if (ui) writeUI(ui);
