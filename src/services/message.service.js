@@ -457,6 +457,15 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
             };
         }
 
+        // Log full input being sent to OpenAI for debugging
+        console.log('[OpenAI API] Full input being sent:', {
+            promptId,
+            promptVersion,
+            fullInput: contextualInput,
+            inputCharCount: contextualInput.length,
+            inputTokenApprox: approxTokens(contextualInput)
+        });
+
         const responseStream = await openaiClient.responses.create(responseOptions);
 
         // Process streaming response
@@ -990,6 +999,15 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                 metadata: metadataPayload
             };
         }
+
+        // Log full input being sent to OpenAI for debugging (first message)
+        console.log('[OpenAI API] Full input being sent (first message):', {
+            promptId,
+            promptVersion,
+            fullInput: contextualInput,
+            inputCharCount: contextualInput.length,
+            inputTokenApprox: approxTokens(contextualInput)
+        });
 
         const responseStream = await openaiClient.responses.create(responseOptions);
 
