@@ -154,6 +154,7 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
     let memoryBrief = { ...DEFAULT_MEMORY_STATE };
     let memoryContext = null;
     let assistantMessageClean = "";
+    let modelVariant = 'arco';
 
     // Helper function to write sanitized UI and accumulate clean text
     const writeUI = (ui) => {
@@ -188,7 +189,7 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         }
 
         const normalizedModel = typeof model === 'string' ? model.toLowerCase().trim() : 'arco';
-        let modelVariant = normalizedModel === 'arco-pro' ? 'arco-pro' : 'arco';
+        modelVariant = normalizedModel === 'arco-pro' ? 'arco-pro' : 'arco';
         if (model && modelVariant === 'arco' && normalizedModel !== 'arco') {
             console.warn(`[DeepThink] Unsupported model variant "${model}" received, defaulting to "arco"`);
         }
@@ -688,6 +689,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
 
     let memoryBrief = { ...DEFAULT_MEMORY_STATE };
     let assistantMessageClean = "";
+    let modelVariant = 'arco';
 
     // Helper function to write sanitized UI and accumulate clean text
     const writeUI = (ui) => {
@@ -761,7 +763,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
         }
 
         const normalizedModel = typeof model === 'string' ? model.toLowerCase().trim() : 'arco';
-        let modelVariant = normalizedModel === 'arco-pro' ? 'arco-pro' : 'arco';
+        modelVariant = normalizedModel === 'arco-pro' ? 'arco-pro' : 'arco';
         if (model && modelVariant === 'arco' && normalizedModel !== 'arco') {
             console.warn(`[DeepThink] Unsupported model variant "${model}" received for first message, defaulting to "arco"`);
         }
