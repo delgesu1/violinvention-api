@@ -37,9 +37,7 @@ const stripCitations = (text) => {
         // Remove filecite markers with turn/file references
         .replace(/[\uE000-\uF8FF]?filecite[\uE000-\uF8FF]?turn\d+file\d+[\uE000-\uF8FF]?/g, '')
         // Remove any remaining private use area characters (often used for citations)
-        .replace(/[\uE000-\uF8FF]/g, '')
-        // Clean up any extra spaces that might result
-        .replace(/\s{2,}/g, ' ');
+        .replace(/[\uE000-\uF8FF]/g, '');
 };
 
 // Helper function to extract text from various event shapes
