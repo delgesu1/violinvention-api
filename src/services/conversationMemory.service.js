@@ -493,7 +493,7 @@ const maybeUpdateGlobalSummary = async ({ chatId, userId, brief, overrides = {},
         metadata: {
           intent: 'conversation_memory_summary',
           chat_id: chatId,
-          turns_compressed: olderPart.length,
+          turns_compressed: String(olderPart.length),
         },
       });
       responseText = extractResponseText(response);
