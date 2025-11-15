@@ -36,6 +36,14 @@ const envVarsSchema = Joi.object()
     ASSISTANT_ID_BOT:Joi.string().optional(), // Legacy, optional for migration
     OPENAI_API_MODEL_BOT:Joi.string().optional(),
 
+    MEMORY_K_RAW_TURNS: Joi.number().integer().min(1).default(3),
+    MEMORY_SUMMARY_TOKEN_CAP: Joi.number().integer().min(100).default(500),
+    MEMORY_PROMPT_TOKEN_BUDGET: Joi.number().integer().min(500).default(3000),
+    MEMORY_CHUNK_SUMMARIZE_THRESHOLD: Joi.number().integer().min(500).default(6000),
+    MEMORY_SUMMARIZER_MODEL: Joi.string().optional(),
+    PROMPT_ID_SUMMARY_GLOBAL: Joi.string().optional(),
+    PROMPT_VERSION_SUMMARY_GLOBAL: Joi.string().optional(),
+
   })
   .unknown();
 
@@ -81,5 +89,14 @@ module.exports = {
       assistantId: envVars.ASSISTANT_ID_BOT, // Legacy
       model: envVars.OPENAI_API_MODEL_BOT || 'gpt-5-nano',
     }
+  },
+  memory: {
+    kRawTurns: envVars.MEMORY_K_RAW_TURNS,
+    summaryTokenCap: envVars.MEMORY_SUMMARY_TOKEN_CAP,
+    promptTokenBudget: envVars.MEMORY_PROMPT_TOKEN_BUDGET,
+    chunkSummarizeThreshold: envVars.MEMORY_CHUNK_SUMMARIZE_THRESHOLD,
+    summarizerModel: envVars.MEMORY_SUMMARIZER_MODEL || 'gpt-5.1-nano',
+    globalSummaryPromptId: envVars.PROMPT_ID_SUMMARY_GLOBAL || 'pmpt_6917ebe9367c819396fe4840cf0f0e050c18a965a3366120',
+    globalSummaryPromptVersion: envVars.PROMPT_VERSION_SUMMARY_GLOBAL || '1'
   }
 };

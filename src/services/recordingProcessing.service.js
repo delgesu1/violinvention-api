@@ -3,6 +3,7 @@ const ApiError = require('../utils/ApiError');
 const { openaiClient } = require('../config/openai');
 const promptConfigService = require('./promptConfig.service');
 const logger = require('../config/logger');
+const { logLLMInput, logLLMOutput } = require('../utils/llmLogger');
 
 const SUMMARIZATION_MODEL = 'gpt-5';
 const TAG_EXTRACTION_MODEL = 'gpt-5-nano';
@@ -97,11 +98,16 @@ const callResponsesApi = async ({ model, instructions, input, options = {} }) =>
     ...options,
   };
 
+  logLLMInput('recordingProcessing.callResponsesApi', `Instructions:\n${instructions}\n\nInput:\n${input}`, {
+    model,
+  });
+
   const response = await openaiClient.responses.create(payload);
   const text = extractOutputText(response);
   if (!text || !text.trim()) {
     throw new ApiError(httpStatus.BAD_GATEWAY, 'OpenAI returned an empty response');
   }
+  logLLMOutput('recordingProcessing.callResponsesApi', text, { model });
   return text.trim();
 };
 

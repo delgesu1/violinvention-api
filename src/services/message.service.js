@@ -21,8 +21,8 @@ const {
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 const { createChatWithFirstMessage } = require('./chat.service');
-const { getBrief, saveBrief, updateBrief, toWire, generateOutline, approxTokens, isContentfulOutline } = require('./brief.service');
-const { createMemoryCardFilter } = require('./memoryCardFilter');
+const { buildMemoryContext, maybeUpdateGlobalSummary, approxTokens, DEFAULT_MEMORY_STATE, saveConversationMemory } = require('./conversationMemory.service');
+const { logLLMInput, logLLMOutput } = require('../utils/llmLogger');
 const { searchVectorStore } = require('./vectorStore.service');
 
 // Helper function to strip citation markers from OpenAI responses
@@ -122,17 +122,6 @@ const formatResponseEventForFrontend = (responseEvent) => {
     }
 };
 
-// Memory card instruction for conversation context management
-// Uses sentinel parsing approach for reliability
-const MEMORY_INSTRUCTION = `
-At the end of your response, emit a memory card using this exact format on its own line:
-<MEMORY_CARD>{"goal":"Master vibrato technique","decisions":["Practice 10 min daily"],"open_q":["Speed vs accuracy?"],"techniques":["vibrato"],"lesson_context":"intermediate vibrato"}</MEMORY_CARD>
-Rules:
-- Output the tag exactly once and nothing else after it.
-- Use valid JSON with double quotes around every key and string value.
-- Use the keys goal, decisions, open_q, techniques, lesson_context (arrays can be empty).
-- Keep the JSON under 120 tokens total.`;
-
 const sendMessage = async ({ message, chat_id, instruction_token, lesson_context, model = 'arco', user, req, res }) => {
     res.writeHead(200, { "Content-type": "text/plain" });
 
@@ -162,20 +151,13 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
     res.on("error", (err) => console.error("Response error:", err));
 
     // Hoist variables for scope access in finally block
-    let brief = null;
+    let memoryBrief = { ...DEFAULT_MEMORY_STATE };
+    let memoryContext = null;
     let assistantMessageClean = "";
-    let capturedCard = null;
-
-    // Create stateful filter for this request
-    const filter = createMemoryCardFilter();
 
     // Helper function to write sanitized UI and accumulate clean text
     const writeUI = (ui) => {
         if (!ui) return;
-        // Optional guard to detect any leaks
-        if (/<MEMORY_CARD>/.test(ui)) {
-            console.error("SANITIZER FAIL: tag reached UI chunk");
-        }
         const sanitizedEvent = JSON.stringify({
             event: 'content.delta',
             data: {
@@ -261,76 +243,31 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         }
         // Note: last_message_at and updated_at are handled by frontend when message completes
 
-        // LOAD CONVERSATION CONTEXT
-        brief = await getBrief(chat_id);
-        const wireBrief = toWire(brief);
+        // LOAD CONVERSATION MEMORY CONTEXT
+        let memoryBlock = "";
+        try {
+            memoryContext = await buildMemoryContext({
+                chatId: chat_id,
+                userId: user.id,
+                excludeMessageIds: userMsg?.message_id ? [userMsg.message_id] : [],
+            });
+            memoryBrief = memoryContext.brief || { ...DEFAULT_MEMORY_STATE };
+            memoryBlock = memoryContext.memoryText || "";
 
-        // Get both initial and recent assistant message outlines for context
-        const [{ data: initialMessage }, { data: recentMessage }] = await Promise.all([
-            // Get initial outline (from first assistant message)
-            supabase
-                .from('messages')
-                .select('outline')
-                .eq('chat_id', chat_id)
-                .eq('role', 'assistant')
-                .eq('is_initial', true)
-                .not('outline', 'is', null)
-                .single(),
-            // Get most recent outline
-            supabase
-                .from('messages')
-                .select('outline')
-                .eq('chat_id', chat_id)
-                .eq('role', 'assistant')
-                .not('outline', 'is', null)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single()
-        ]);
-
-        const initialOutline = brief.initial_outline || initialMessage?.outline || "";
-        const recentOutline = recentMessage?.outline || "";
-
-        // Determine which outlines to include based on content
-        const useInitial = isContentfulOutline(initialOutline);
-        const useRecent = isContentfulOutline(recentOutline);
-        const outlinesDiffer = initialOutline !== recentOutline;
+            console.log('[Conversation Memory] Block tokens:', approxTokens(memoryBlock));
+            console.log('[Conversation Memory] Tail turns:', memoryContext?.tailTurns?.length || 0, 'Dropped:', memoryContext?.droppedTailTurns || 0, 'Chunk tokens:', memoryContext?.chunkTokenCount || 0);
+        } catch (memoryError) {
+            console.error('[Conversation Memory] Failed to build context, continuing without memory block:', memoryError);
+            memoryBrief = { ...DEFAULT_MEMORY_STATE };
+            memoryContext = null;
+            memoryBlock = "";
+        }
 
         // BUILD INPUT WITH CONVERSATION CONTEXT
-        // Build segments array: brief → outlines → user message → instruction
         const segments = [];
-
-        // 1. Add conversation brief (if exists)
-        if (wireBrief) {
-            segments.push(`Conversation context: ${wireBrief}`);
+        if (memoryBlock) {
+            segments.push(memoryBlock);
         }
-
-        const shouldIncludeInitial = useInitial && outlinesDiffer;
-        const shouldIncludeRecent = useRecent && (outlinesDiffer || !useInitial);
-
-        // 2. Add initial outline when it provides additional context
-        if (shouldIncludeInitial) {
-            segments.push(`Initial response outline: ${initialOutline}`);
-        }
-
-        // 3. Add recent outline when it supplements or replaces the initial outline
-        if (shouldIncludeRecent) {
-            segments.push(`Previous response outline: ${recentOutline}`);
-        }
-
-        // 4. Guarantee at least one outline is present when available
-        if (!shouldIncludeInitial && !shouldIncludeRecent) {
-            const fallbackOutline = recentOutline || initialOutline;
-            if (fallbackOutline) {
-                segments.push(`Previous response outline: ${fallbackOutline}`);
-            }
-        }
-
-        // 5. Add user message and memory instruction
-        segments.push(userMessageContent);
-        segments.push(MEMORY_INSTRUCTION);
-
-        let contextualInput = segments.filter(Boolean).join('\n\n');
 
         // Determine chat mode
         const chatMode = chat.chat_mode || 'arcoai';
@@ -397,14 +334,23 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         }
 
         if (retrievalContext) {
-            segments.splice(segments.length - 2, 0, retrievalContext);
-            contextualInput = segments.filter(Boolean).join('\n\n');
+            segments.push(retrievalContext);
         }
 
-        console.log('[Conversation Context] Brief tokens:', approxTokens(wireBrief));
-        console.log('[Conversation Context] Initial outline tokens:', approxTokens(initialOutline));
-        console.log('[Conversation Context] Recent outline tokens:', approxTokens(recentOutline));
-        console.log('[Conversation Context] Using initial:', useInitial, 'Using recent:', useRecent);
+        segments.push(userMessageContent);
+
+        const contextualInput = segments.filter(Boolean).join('\n\n');
+
+        const inputMetadata = {
+            chat_id,
+            prompt_id: promptId,
+            prompt_version: promptVersion,
+            chat_mode: chatMode,
+            model_variant: modelVariant,
+        };
+        logLLMInput('sendMessage.main', contextualInput, inputMetadata);
+
+        console.log('[Conversation Context] Memory tokens:', approxTokens(memoryBlock));
         console.log('[Conversation Context] Total context tokens:', approxTokens(contextualInput));
 
         const metadataPayload = {
@@ -501,16 +447,15 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                 isFirstEvent = false;
             }
 
-            // Process events by type with stateful filtering
+            // Process events by type
             const eventType = event.type || event.event;
 
             if (eventType === 'response.output_text.delta' || eventType === 'output_text.delta' || eventType === 'content.delta') {
-                // Delta events: process through stateful filter and strip citations
+                // Delta events: strip citations and stream to UI
                 const rawText = stripCitations(getTextDelta(event));
-                const { ui, card } = filter.feed(rawText);
-
-                if (ui) writeUI(ui);
-                if (card && !capturedCard) capturedCard = card;
+                if (rawText) {
+                    writeUI(rawText);
+                }
                 continue;  // DO NOT also write the raw delta event
 
             } else if (eventType === 'response.created' || eventType === 'response.started') {
@@ -536,11 +481,6 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                 if (eventData) res.write(eventData);
             }
         }
-
-        // Flush leftover UI tail after stream ends
-        const tail = filter.flush();
-        if (tail.ui) writeUI(tail.ui);
-
     } catch (error) {
         console.error("Error in sendMessage:", error);
         
@@ -586,62 +526,39 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
             res.write(errorEvent);
         }
     } finally {
-        // Save assistant message and update conversation context
+        // Save assistant message and kick off background summarization
         if (assistantMessageClean && !abortController.signal.aborted) {
             try {
-                let outline = "";
-                let nextBrief = brief;
+                const assistantPayload = {
+                    role: 'assistant',
+                    content: assistantMessageClean,
+                    chat_id,
+                    user_id: user.id,
+                    response_id: responseId,
+                    item_id: itemId,
+                    metadata: {
+                        model_variant: modelVariant,
+                    },
+                };
 
-                // Process captured MEMORY_CARD if found
-                if (capturedCard) {
-                    try {
-                        const memoryCard = JSON.parse(capturedCard);
-                        nextBrief = updateBrief(brief, memoryCard);
-                        console.log('[Brief Updated] New token count:', approxTokens(toWire(nextBrief)));
-                    } catch (parseError) {
-                        console.error('[MEMORY_CARD] Parse error, keeping previous brief:', parseError, {
-                            cardPreview: capturedCard.slice(0, 200)
-                        });
-                    }
-                }
+                logLLMOutput('sendMessage.main', assistantMessageClean, {
+                    chat_id,
+                    model_variant: modelVariant,
+                    response_id: responseId,
+                    item_id: itemId,
+                });
 
-                // Final safety scrub before database storage (paranoia-level)
-                assistantMessageClean = assistantMessageClean.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>\s*$/g, '');
-
-                // Generate outline for next turn from clean text
-                outline = generateOutline(assistantMessageClean);
-
-                // Persist updated brief if needed
-                if (capturedCard || !nextBrief.initial_outline) {
-                    if (!nextBrief.initial_outline) {
-                        nextBrief = {
-                            ...nextBrief,
-                            initial_outline: outline,
-                        };
-                    }
-
-                    try {
-                        await saveBrief(chat_id, user.id, nextBrief);
-                    } catch (briefError) {
-                        console.error('[Brief Save] Failed to persist updated brief:', briefError);
-                    }
-                }
-
-                // Save assistant message with outline
                 const { error: saveError } = await supabase
                     .from('messages')
-                    .insert({
-                        role: 'assistant',
-                        content: assistantMessageClean,
-                        outline: outline,
-                        chat_id,
-                        user_id: user.id,
-                        response_id: responseId,
-                        item_id: itemId,
-                    });
+                    .insert(assistantPayload);
 
                 if (saveError) {
                     console.error("Error saving assistant message:", saveError);
+                } else if (memoryBrief) {
+                    maybeUpdateGlobalSummary({ chatId: chat_id, userId: user.id, brief: memoryBrief })
+                        .catch((summaryError) => {
+                            console.error('[Conversation Memory] Failed to summarize chunk:', summaryError);
+                        });
                 }
             } catch (dbError) {
                 console.error("Error saving assistant message:", dbError);
@@ -665,12 +582,18 @@ const getMessageContext = async (inputMessage) => {
         });
 
         // Use Responses API to generate title from first message
+        const titlePromptText = `Generate a short, descriptive title (max 50 characters) for this message: "${inputMessage}"`;
+        logLLMInput('message.titleGenerator', titlePromptText, {
+            prompt_id: PROMPT_ID_BOT,
+            prompt_version: PROMPT_VERSION_BOT,
+        });
+
         const response = await botClient.responses.create({
             prompt: {
                 id: PROMPT_ID_BOT,
                 version: PROMPT_VERSION_BOT
             },
-            input: `Generate a short, descriptive title (max 50 characters) for this message: "${inputMessage}"`,
+            input: titlePromptText,
             stream: false, // Non-streaming for title generation
         });
 
@@ -683,6 +606,13 @@ const getMessageContext = async (inputMessage) => {
 
         // Extract title from response - check both output_text and content structure
         const title = response.output_text || response.output?.[0]?.content?.[0]?.text || null;
+
+        if (title) {
+            logLLMOutput('message.titleGenerator', title, {
+                prompt_id: PROMPT_ID_BOT,
+                prompt_version: PROMPT_VERSION_BOT,
+            });
+        }
 
         console.log('[Title Generation] Extracted title:', {
             title,
@@ -756,32 +686,12 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
     res.on("close", handleAbort);
     res.on("error", (err) => console.error("Response error:", err));
 
-    // Initialize brief for first message and hoist variables for finally block access
-    const initialBrief = {
-        summary: {
-            goal: "",
-            constraints: [],
-            decisions: [],
-            open_q: [],
-            techniques: [],
-            lesson_context: lesson_context?.type || ""
-        },
-        memory_cards: [],
-        initial_outline: ""
-    };
+    let memoryBrief = { ...DEFAULT_MEMORY_STATE };
     let assistantMessageClean = "";
-    let capturedCard = null;
-
-    // Create stateful filter for this request
-    const filter = createMemoryCardFilter();
 
     // Helper function to write sanitized UI and accumulate clean text
     const writeUI = (ui) => {
         if (!ui) return;
-        // Optional guard to detect any leaks
-        if (/<MEMORY_CARD>/.test(ui)) {
-            console.error("SANITIZER FAIL: tag reached UI chunk");
-        }
         const sanitizedEvent = JSON.stringify({
             event: 'content.delta',
             data: {
@@ -806,6 +716,14 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
             isReusedChat: isReusedChat || false
         };
         res.write(JSON.stringify(chatCreatedEvent) + '\n');
+
+        if (isReusedChat) {
+            try {
+                await saveConversationMemory(chatId, user.id, DEFAULT_MEMORY_STATE);
+            } catch (memoryResetError) {
+                console.error('[Conversation Memory] Failed to reset memory for reused chat:', memoryResetError);
+            }
+        }
 
         // Generate AI title ASYNCHRONOUSLY (don't block response) if this is a new chat with "New Chat" title
         if (chat.title === "New Chat") {
@@ -880,13 +798,26 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
             throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, `Failed to save user message: ${msgError.message}`);
         }
 
-        // Build input with MEMORY_INSTRUCTION for first message
-        const contextualSegments = [
-            userMessageContent,
-            MEMORY_INSTRUCTION
-        ];
+        let memoryBlock = "";
+        try {
+            const memoryContext = await buildMemoryContext({
+                chatId,
+                userId: user.id,
+                excludeMessageIds: userMsg?.message_id ? [userMsg.message_id] : [],
+            });
+            memoryBrief = memoryContext.brief || { ...DEFAULT_MEMORY_STATE };
+            memoryBlock = memoryContext.memoryText || "";
+            console.log('[Conversation Memory] (first message) Block tokens:', approxTokens(memoryBlock));
+        } catch (memoryError) {
+            console.error('[Conversation Memory] Failed to prepare first-message context:', memoryError);
+            memoryBrief = { ...DEFAULT_MEMORY_STATE };
+            memoryBlock = "";
+        }
 
-        let contextualInput = contextualSegments.join('\n\n');
+        const contextualSegments = [];
+        if (memoryBlock) {
+            contextualSegments.push(memoryBlock);
+        }
 
         let promptId = PROMPT_ID;
         let promptVersion = PROMPT_VERSION;
@@ -924,8 +855,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                     return `${headerParts.join(' • ')}\n${truncatedText}`;
                 }).join('\n\n');
 
-                contextualSegments.splice(1, 0, `Relevant lesson excerpts:\n${formatted}`);
-                contextualInput = contextualSegments.join('\n\n');
+                contextualSegments.push(`Relevant lesson excerpts:\n${formatted}`);
             } else {
                 console.log(`[VectorStore] No personal lesson matches found for user ${user.id} (new chat ${chatId})`);
             }
@@ -950,6 +880,20 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
             promptInstructions = PROMPT_INSTRUCTIONS_DEEPTHINK || promptInstructions;
         }
 
+        contextualSegments.push(userMessageContent);
+        const contextualInput = contextualSegments.filter(Boolean).join('\n\n');
+
+        logLLMInput('sendFirstMessage.main', contextualInput, {
+            chat_id: chatId,
+            prompt_id: promptId,
+            prompt_version: promptVersion,
+            chat_mode: chat_mode,
+            model_variant: modelVariant,
+        });
+
+        console.log('[Conversation Context] (first message) Memory tokens:', approxTokens(memoryBlock));
+        console.log('[Conversation Context] (first message) Total context tokens:', approxTokens(contextualInput));
+
         const metadataPayload = {
             model_variant: modelVariant,
             ...(lesson_context ? { lesson_context: JSON.stringify(lesson_context) } : {})
@@ -968,7 +912,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                 ? `${overrideInstructions}\n\n${contextualInput}`
                 : contextualInput;
 
-            console.log('[OpenAI API] About to call with MEMORY instruction (first message):', {
+            console.log('[OpenAI API] About to call with memory context (first message):', {
                 chatMode: chat_mode,
                 modelVariant,
                 prompt_id: promptId,
@@ -993,7 +937,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                 responseOptions.prompt = promptReference;
             }
         } else {
-            console.log('[OpenAI API] About to call with MEMORY instruction (first message):', {
+            console.log('[OpenAI API] About to call with memory context (first message):', {
                 chatMode: chat_mode,
                 modelVariant,
                 prompt_id: promptId,
@@ -1044,16 +988,15 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                 isFirstEvent = false;
             }
 
-            // Process events by type with stateful filtering
+            // Process events by type
             const eventType = event.type || event.event;
 
             if (eventType === 'response.output_text.delta' || eventType === 'output_text.delta' || eventType === 'content.delta') {
-                // Delta events: process through stateful filter and strip citations
+                // Delta events: strip citations and forward to UI
                 const rawText = stripCitations(getTextDelta(event));
-                const { ui, card } = filter.feed(rawText);
-
-                if (ui) writeUI(ui);
-                if (card && !capturedCard) capturedCard = card;
+                if (rawText) {
+                    writeUI(rawText);
+                }
                 continue;  // DO NOT also write the raw delta event
 
             } else if (eventType === 'response.created' || eventType === 'response.started') {
@@ -1079,11 +1022,6 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                 if (eventData) res.write(eventData);
             }
         }
-
-        // Flush leftover UI tail after stream ends
-        const tail = filter.flush();
-        if (tail.ui) writeUI(tail.ui);
-
     } catch (error) {
         console.error("Error in sendFirstMessage:", error);
         
@@ -1129,64 +1067,40 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
             res.write(errorEvent);
         }
     } finally {
-        // Save assistant message and initialize conversation context
-        if (assistantMessageClean && !abortController.signal.aborted) {
+        // Save assistant message and trigger background summarization setup
+        if (assistantMessageClean && !abortController.signal.aborted && chatId) {
             try {
-                let outline = "";
-                let nextBrief = initialBrief;
+                const assistantPayload = {
+                    role: 'assistant',
+                    content: assistantMessageClean,
+                    is_initial: true,
+                    chat_id: chatId,
+                    user_id: user.id,
+                    response_id: responseId,
+                    item_id: itemId,
+                    metadata: {
+                        model_variant: modelVariant,
+                    },
+                };
 
-                // Process captured MEMORY_CARD for initial brief creation
-                if (capturedCard) {
-                    try {
-                        const memoryCard = JSON.parse(capturedCard);
-                        nextBrief = updateBrief(initialBrief, memoryCard);
-                        console.log('[First Message] Brief created with token count:', approxTokens(toWire(nextBrief)));
-                    } catch (parseError) {
-                        console.error('[MEMORY_CARD] Parse error on first message, saving default brief:', parseError, {
-                            cardPreview: capturedCard.slice(0, 200)
-                        });
-                        nextBrief = initialBrief;
-                    }
-                } else {
-                    // No MEMORY_CARD found, keep default brief
-                    console.log('[First Message] No MEMORY_CARD found, using default brief');
-                }
+                logLLMOutput('sendFirstMessage.main', assistantMessageClean, {
+                    chat_id: chatId,
+                    model_variant: modelVariant,
+                    response_id: responseId,
+                    item_id: itemId,
+                });
 
-                // Final safety scrub before database storage (paranoia-level)
-                assistantMessageClean = assistantMessageClean.replace(/<MEMORY_CARD>[\s\S]*?<\/MEMORY_CARD>\s*$/g, '');
-
-                // Generate outline for next turn from clean text
-                outline = generateOutline(assistantMessageClean);
-
-                if (!nextBrief.initial_outline) {
-                    nextBrief = {
-                        ...nextBrief,
-                        initial_outline: outline,
-                    };
-                }
-
-                try {
-                    await saveBrief(chatId, user.id, nextBrief);
-                } catch (briefError) {
-                    console.error('[First Message] Failed to persist brief:', briefError);
-                }
-
-                // Save assistant message with outline and mark as initial
                 const { error: saveError } = await supabase
                     .from('messages')
-                    .insert({
-                        role: 'assistant',
-                        content: assistantMessageClean,
-                        outline: outline,
-                        is_initial: true, // Mark first assistant response
-                        chat_id: chatId,
-                        user_id: user.id,
-                        response_id: responseId,
-                        item_id: itemId,
-                    });
+                    .insert(assistantPayload);
 
                 if (saveError) {
                     console.error("Error saving assistant message:", saveError);
+                } else if (memoryBrief) {
+                    maybeUpdateGlobalSummary({ chatId, userId: user.id, brief: memoryBrief })
+                        .catch((summaryError) => {
+                            console.error('[Conversation Memory] Failed to summarize chunk (first message):', summaryError);
+                        });
                 }
             } catch (dbError) {
                 console.error("Error saving assistant message:", dbError);
