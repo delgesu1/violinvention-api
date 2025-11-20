@@ -13,6 +13,9 @@ const {
     PROMPT_ID_DEEPTHINK,
     PROMPT_VERSION_DEEPTHINK,
     PROMPT_INSTRUCTIONS_DEEPTHINK,
+    PROMPT_ID_LESSON_PLAN,
+    PROMPT_VERSION_LESSON_PLAN,
+    PROMPT_INSTRUCTIONS_LESSON_PLAN,
     OPENAI_MODEL,
     botClient,
     PROMPT_ID_BOT,
@@ -354,7 +357,8 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
 
         const metadataPayload = {
             model_variant: modelVariant,
-            ...(lesson_context ? { lesson_context: JSON.stringify(lesson_context) } : {})
+            ...(lesson_context ? { lesson_context: JSON.stringify(lesson_context) } : {}),
+            ...(lesson_plan_prompt ? { lesson_plan_prompt: true } : {})
         };
 
         let responseOptions;
@@ -656,7 +660,7 @@ const findAllMessages = async (chat_id, user) => {
     return messages || [];
 };
 
-const sendFirstMessage = async ({ message, instruction_token, lesson_context, chat_mode = 'arcoai', model = 'arco', user, req, res }) => {
+const sendFirstMessage = async ({ message, instruction_token, lesson_context, chat_mode = 'arcoai', model = 'arco', lesson_plan_prompt = false, user, req, res }) => {
     res.writeHead(200, { "Content-type": "text/plain" });
 
     const abortController = new AbortController();
@@ -705,7 +709,14 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
 
     try {
         // Create chat with first message using Responses API (conversation)
-        const { chat, conversation_id, isReusedChat } = await createChatWithFirstMessage(user, message, instruction_token, chat_mode);
+        const promptOverrideId = lesson_plan_prompt ? PROMPT_ID_LESSON_PLAN : null;
+        const { chat, conversation_id, isReusedChat } = await createChatWithFirstMessage(
+            user,
+            message,
+            instruction_token,
+            chat_mode,
+            promptOverrideId
+        );
         chatId = chat.chat_id;
         conversationId = conversation_id;
         
@@ -824,7 +835,11 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
         let promptInstructions = PROMPT_INSTRUCTIONS;
         let vectorSearchResults = [];
 
-        if (chat_mode === 'personal_lessons') {
+        if (lesson_plan_prompt) {
+            promptId = PROMPT_ID_LESSON_PLAN || promptId;
+            promptVersion = PROMPT_VERSION_LESSON_PLAN || promptVersion;
+            promptInstructions = PROMPT_INSTRUCTIONS_LESSON_PLAN || promptInstructions;
+        } else if (chat_mode === 'personal_lessons') {
             promptId = PROMPT_ID_PERSONAL_LESSONS;
             promptVersion = PROMPT_VERSION_PERSONAL_LESSONS;
             promptInstructions = PROMPT_INSTRUCTIONS_PERSONAL_LESSONS;

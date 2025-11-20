@@ -154,7 +154,7 @@ const deleteChat = async (user, chat_id) => {
  * @param {string} instruction_token - Optional instruction token to append
  * @returns {Object} Chat creation result with conversation_id and isReusedChat flag
  */
-const createChatWithFirstMessage = async (user, message, instruction_token = '', chat_mode = 'arcoai') => {
+const createChatWithFirstMessage = async (user, message, instruction_token = '', chat_mode = 'arcoai', prompt_id_override = null) => {
     try {
         // Extract clean message without instruction token for title generation
         let cleanMessage = message;
@@ -192,6 +192,9 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '',
                 await clearChatMessages(existingChat.chat_id, user.id);
                 
                 const updateFields = { updated_at: new Date().toISOString() };
+                if (prompt_id_override) {
+                    updateFields.prompt_id = prompt_id_override;
+                }
                 if (chat_mode && ['arcoai', 'personal_lessons'].includes(chat_mode) && chat_mode !== existingChat.chat_mode) {
                     updateFields.chat_mode = chat_mode;
                     updateFields.prompt_id = chat_mode === 'personal_lessons' ? PROMPT_ID_PERSONAL_LESSONS : PROMPT_ID;
@@ -268,7 +271,9 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '',
         const conversationId = uuidv4();
         
         // Create chat in database
-        const promptId = chat_mode === 'personal_lessons' ? PROMPT_ID_PERSONAL_LESSONS : PROMPT_ID;
+        const promptId = prompt_id_override
+            ? prompt_id_override
+            : (chat_mode === 'personal_lessons' ? PROMPT_ID_PERSONAL_LESSONS : PROMPT_ID);
 
         const { data: chatData, error } = await supabase
             .from('chats')
