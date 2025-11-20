@@ -408,11 +408,13 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                 retrievalMode: 'prompt_reference'
             });
 
+            const promptRef = { id: promptId };
+            if (promptVersion) {
+                promptRef.version = promptVersion;
+            }
+
             responseOptions = {
-                prompt: {
-                    id: promptId,
-                    version: promptVersion
-                },
+                prompt: promptRef,
                 input: contextualInput,
                 stream: true,
                 store: true,

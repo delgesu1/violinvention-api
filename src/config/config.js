@@ -81,7 +81,7 @@ module.exports = {
       personalLessonsDeepDivePromptVersion: envVars.PROMPT_VERSION_PERSONAL_LESSONS_DEEPDIVE || '2',
       personalLessonsDeepDivePromptInstructions: envVars.PROMPT_INSTRUCTIONS_PERSONAL_LESSONS_DEEPDIVE || null,
       lessonPlanPromptId: envVars.PROMPT_ID_LESSON_PLAN || 'pmpt_691e61cef9b48190bfccf079033837c107cb8023538d50e1',
-      lessonPlanPromptVersion: envVars.PROMPT_VERSION_LESSON_PLAN || '1',
+      lessonPlanPromptVersion: envVars.PROMPT_VERSION_LESSON_PLAN || null,
       lessonPlanPromptInstructions: envVars.PROMPT_INSTRUCTIONS_LESSON_PLAN || null,
       deepThinkPromptId: envVars.PROMPT_ID_DEEPTHINK || 'pmpt_68e6212f66648190b909ceeba3e2b514051a81413723cdec',
       deepThinkPromptVersion: envVars.PROMPT_VERSION_DEEPTHINK || '3',
