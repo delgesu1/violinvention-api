@@ -839,8 +839,10 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
 
         if (lesson_plan_prompt) {
             promptId = PROMPT_ID_LESSON_PLAN || promptId;
-            promptVersion = PROMPT_VERSION_LESSON_PLAN || promptVersion;
-            promptInstructions = PROMPT_INSTRUCTIONS_LESSON_PLAN || promptInstructions;
+            // For lesson plan, do NOT fall back to the main prompt version; use lesson-plan version if provided, else none.
+            promptVersion = PROMPT_VERSION_LESSON_PLAN || null;
+            // Prefer lesson-plan instructions if supplied; otherwise let the prompt’s default handle it.
+            promptInstructions = PROMPT_INSTRUCTIONS_LESSON_PLAN || null;
         } else if (chat_mode === 'personal_lessons') {
             promptId = PROMPT_ID_PERSONAL_LESSONS;
             promptVersion = PROMPT_VERSION_PERSONAL_LESSONS;
