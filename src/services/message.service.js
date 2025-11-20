@@ -2,24 +2,18 @@ const { supabase } = require("../config/supabase.js");
 const {
     openaiClient,
     PROMPT_ID,
-    PROMPT_VERSION,
     PROMPT_INSTRUCTIONS,
     PROMPT_ID_PERSONAL_LESSONS,
-    PROMPT_VERSION_PERSONAL_LESSONS,
     PROMPT_INSTRUCTIONS_PERSONAL_LESSONS,
     PROMPT_ID_PERSONAL_LESSONS_DEEPDIVE,
-    PROMPT_VERSION_PERSONAL_LESSONS_DEEPDIVE,
     PROMPT_INSTRUCTIONS_PERSONAL_LESSONS_DEEPDIVE,
     PROMPT_ID_DEEPTHINK,
-    PROMPT_VERSION_DEEPTHINK,
     PROMPT_INSTRUCTIONS_DEEPTHINK,
     PROMPT_ID_LESSON_PLAN,
-    PROMPT_VERSION_LESSON_PLAN,
     PROMPT_INSTRUCTIONS_LESSON_PLAN,
     OPENAI_MODEL,
     botClient,
-    PROMPT_ID_BOT,
-    PROMPT_VERSION_BOT
+    PROMPT_ID_BOT
 } = require("../config/openai");
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
@@ -274,14 +268,12 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         // Determine chat mode
         const chatMode = chat.chat_mode || 'arcoai';
         let promptId = PROMPT_ID;
-        let promptVersion = PROMPT_VERSION;
         let promptInstructions = PROMPT_INSTRUCTIONS;
         let vectorSearchResults = [];
         let retrievalContext = '';
 
         if (chatMode === 'personal_lessons') {
             promptId = PROMPT_ID_PERSONAL_LESSONS;
-            promptVersion = PROMPT_VERSION_PERSONAL_LESSONS;
             promptInstructions = PROMPT_INSTRUCTIONS_PERSONAL_LESSONS;
 
             vectorSearchResults = await searchVectorStore(user.id, userDisplayContent, 5);
@@ -322,16 +314,13 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                 }
 
                 if (deepDivePromptId === PROMPT_ID_PERSONAL_LESSONS_DEEPDIVE) {
-                    promptVersion = PROMPT_VERSION_PERSONAL_LESSONS_DEEPDIVE || promptVersion;
                     promptInstructions = PROMPT_INSTRUCTIONS_PERSONAL_LESSONS_DEEPDIVE || promptInstructions;
                 } else {
-                    promptVersion = PROMPT_VERSION_DEEPTHINK || promptVersion;
                     promptInstructions = PROMPT_INSTRUCTIONS_DEEPTHINK || promptInstructions;
                 }
             }
         } else if (isDeepThink) {
             promptId = PROMPT_ID_DEEPTHINK || PROMPT_ID;
-            promptVersion = PROMPT_VERSION_DEEPTHINK || PROMPT_VERSION;
             promptInstructions = PROMPT_INSTRUCTIONS_DEEPTHINK || promptInstructions;
         }
 
@@ -346,7 +335,6 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         const inputMetadata = {
             chat_id,
             prompt_id: promptId,
-            prompt_version: promptVersion,
             chat_mode: chatMode,
             model_variant: modelVariant,
         };
@@ -365,9 +353,6 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
 
         if (chatMode === 'personal_lessons') {
             const promptReference = promptId ? { id: promptId } : null;
-            if (promptReference && promptVersion) {
-                promptReference.version = promptVersion;
-            }
 
             const overrideInstructions = (promptInstructions || '').trim();
             const personalInput = overrideInstructions
@@ -378,7 +363,6 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                 chatMode,
                 modelVariant,
                 prompt_id: promptId,
-                version: promptVersion,
                 inputLength: personalInput.length,
                 retrievalMode: `manual_lookup:${vectorSearchResults.length}`,
                 usingPromptReference: !!promptReference
@@ -403,18 +387,12 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
                 chatMode,
                 modelVariant,
                 prompt_id: promptId,
-                version: promptVersion,
                 inputLength: contextualInput.length,
                 retrievalMode: 'prompt_reference'
             });
 
-            const promptRef = { id: promptId };
-            if (promptVersion) {
-                promptRef.version = promptVersion;
-            }
-
             responseOptions = {
-                prompt: promptRef,
+                prompt: { id: promptId },
                 input: contextualInput,
                 stream: true,
                 store: true,
@@ -428,7 +406,6 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         // Log full input being sent to OpenAI for debugging
         console.log('[OpenAI API] Full input being sent:', {
             promptId,
-            promptVersion,
             fullInput: contextualInput,
             inputCharCount: contextualInput.length,
             inputTokenApprox: approxTokens(contextualInput)
@@ -582,22 +559,17 @@ const getMessageContext = async (inputMessage) => {
         console.log('[Title Generation] Starting title generation for message:', {
             messageLength: inputMessage.length,
             messagePreview: inputMessage.substring(0, 100) + '...',
-            promptId: PROMPT_ID_BOT,
-            promptVersion: PROMPT_VERSION_BOT
+            promptId: PROMPT_ID_BOT
         });
 
         // Use Responses API to generate title from first message
         const titlePromptText = `Generate a short, descriptive title (max 50 characters) for this message: "${inputMessage}"`;
         logLLMInput('message.titleGenerator', titlePromptText, {
             prompt_id: PROMPT_ID_BOT,
-            prompt_version: PROMPT_VERSION_BOT,
         });
 
         const response = await botClient.responses.create({
-            prompt: {
-                id: PROMPT_ID_BOT,
-                version: PROMPT_VERSION_BOT
-            },
+            prompt: { id: PROMPT_ID_BOT },
             input: titlePromptText,
             stream: false, // Non-streaming for title generation
         });
@@ -615,7 +587,6 @@ const getMessageContext = async (inputMessage) => {
         if (title) {
             logLLMOutput('message.titleGenerator', title, {
                 prompt_id: PROMPT_ID_BOT,
-                prompt_version: PROMPT_VERSION_BOT,
             });
         }
 
@@ -630,8 +601,7 @@ const getMessageContext = async (inputMessage) => {
             error: error.message,
             status: error.status,
             code: error.code,
-            promptId: PROMPT_ID_BOT,
-            promptVersion: PROMPT_VERSION_BOT
+            promptId: PROMPT_ID_BOT
         });
         return null;
     }
@@ -833,19 +803,15 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
         }
 
         let promptId = PROMPT_ID;
-        let promptVersion = PROMPT_VERSION;
         let promptInstructions = PROMPT_INSTRUCTIONS;
         let vectorSearchResults = [];
 
         if (lesson_plan_prompt) {
             promptId = PROMPT_ID_LESSON_PLAN || promptId;
-            // For lesson plan, do NOT fall back to the main prompt version; use lesson-plan version if provided, else none.
-            promptVersion = PROMPT_VERSION_LESSON_PLAN || null;
             // Prefer lesson-plan instructions if supplied; otherwise let the prompt’s default handle it.
             promptInstructions = PROMPT_INSTRUCTIONS_LESSON_PLAN || null;
         } else if (chat_mode === 'personal_lessons') {
             promptId = PROMPT_ID_PERSONAL_LESSONS;
-            promptVersion = PROMPT_VERSION_PERSONAL_LESSONS;
             promptInstructions = PROMPT_INSTRUCTIONS_PERSONAL_LESSONS;
 
             vectorSearchResults = await searchVectorStore(user.id, userDisplayContent, 5);
@@ -886,16 +852,13 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                 }
 
                 if (deepDivePromptId === PROMPT_ID_PERSONAL_LESSONS_DEEPDIVE) {
-                    promptVersion = PROMPT_VERSION_PERSONAL_LESSONS_DEEPDIVE || promptVersion;
                     promptInstructions = PROMPT_INSTRUCTIONS_PERSONAL_LESSONS_DEEPDIVE || promptInstructions;
                 } else {
-                    promptVersion = PROMPT_VERSION_DEEPTHINK || promptVersion;
                     promptInstructions = PROMPT_INSTRUCTIONS_DEEPTHINK || promptInstructions;
                 }
             }
         } else if (isDeepThink) {
             promptId = PROMPT_ID_DEEPTHINK || PROMPT_ID;
-            promptVersion = PROMPT_VERSION_DEEPTHINK || PROMPT_VERSION;
             promptInstructions = PROMPT_INSTRUCTIONS_DEEPTHINK || promptInstructions;
         }
 
@@ -905,7 +868,6 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
         logLLMInput('sendFirstMessage.main', contextualInput, {
             chat_id: chatId,
             prompt_id: promptId,
-            prompt_version: promptVersion,
             chat_mode: chat_mode,
             model_variant: modelVariant,
         });
@@ -922,9 +884,6 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
 
         if (chat_mode === 'personal_lessons') {
             const promptReference = promptId ? { id: promptId } : null;
-            if (promptReference && promptVersion) {
-                promptReference.version = promptVersion;
-            }
 
             const overrideInstructions = (promptInstructions || '').trim();
             const personalInput = overrideInstructions
@@ -935,7 +894,6 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                 chatMode: chat_mode,
                 modelVariant,
                 prompt_id: promptId,
-                version: promptVersion,
                 inputLength: personalInput.length,
                 retrievalMode: `manual_lookup:${vectorSearchResults.length}`,
                 usingPromptReference: !!promptReference
@@ -960,16 +918,12 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                 chatMode: chat_mode,
                 modelVariant,
                 prompt_id: promptId,
-                version: promptVersion,
                 inputLength: contextualInput.length,
                 retrievalMode: 'prompt_reference'
             });
 
             responseOptions = {
-                prompt: {
-                    id: promptId,
-                    version: promptVersion
-                },
+                prompt: { id: promptId },
                 input: contextualInput,
                 stream: true,
                 store: true,
@@ -983,7 +937,6 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
         // Log full input being sent to OpenAI for debugging (first message)
         console.log('[OpenAI API] Full input being sent (first message):', {
             promptId,
-            promptVersion,
             fullInput: contextualInput,
             inputCharCount: contextualInput.length,
             inputTokenApprox: approxTokens(contextualInput)

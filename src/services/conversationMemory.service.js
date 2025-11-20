@@ -13,7 +13,6 @@ const DEFAULT_MEMORY_STATE = {
 const summarizerPromptRef = memoryConfig.globalSummaryPromptId
   ? {
       id: memoryConfig.globalSummaryPromptId,
-      version: memoryConfig.globalSummaryPromptVersion,
     }
   : null;
 
@@ -476,7 +475,6 @@ const maybeUpdateGlobalSummary = async ({ chatId, userId, brief, overrides = {},
       chat_id: chatId,
       turns: olderPart.length,
       prompt_id: summarizerPromptRef.id,
-      prompt_version: summarizerPromptRef.version,
     });
 
     if (!summarizerPromptRef?.id) {

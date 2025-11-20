@@ -162,11 +162,14 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '',
             cleanMessage = message.replace(instruction_token, '').trim();
         }
         
-        // Check if this is a prep digest message
+        // Check if this is a prep digest or lesson plan message
         // Pattern matches "Prep digest for {studentName}" at the start of a line (excluding newlines from student name)
         const prepDigestPattern = /^Prep digest for ([^\n]+)$/m;
+        const lessonPlanPattern = /^Lesson plan for ([^\n]+)$/m;
+
         const prepMatch = cleanMessage.match(prepDigestPattern);
-        
+        const lessonPlanMatch = cleanMessage.match(lessonPlanPattern);
+
         if (prepMatch) {
             // This is a prep digest message - check for existing chat
             const studentName = prepMatch[1].trim();
@@ -251,6 +254,77 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '',
                 };
             }
             // If no existing prep chat found, continue to create new one with predictable title
+        } else if (lessonPlanMatch) {
+            // Lesson plan auto message: reuse a single chat per student, similar to prep digest behavior
+            const studentName = lessonPlanMatch[1].trim();
+            console.log('[DEBUG] Lesson plan detected:', {
+                studentName,
+                matchedPattern: lessonPlanMatch[0],
+                fullMessage: cleanMessage.substring(0, 100) + '...'
+            });
+
+            if (!studentName) {
+                console.error('Empty student name in lesson plan message');
+                throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid lesson plan message: missing student name');
+            }
+
+            let existingChat = await findLessonPlanChat(user, studentName);
+
+            if (existingChat) {
+                console.log(`Reusing existing lesson plan chat for ${studentName}:`, existingChat.chat_id);
+
+                await clearChatMessages(existingChat.chat_id, user.id);
+
+                const updateFields = { updated_at: new Date().toISOString() };
+                if (prompt_id_override) {
+                    updateFields.prompt_id = prompt_id_override;
+                }
+                if (chat_mode && ['arcoai', 'personal_lessons'].includes(chat_mode) && chat_mode !== existingChat.chat_mode) {
+                    updateFields.chat_mode = chat_mode;
+                    updateFields.prompt_id = chat_mode === 'personal_lessons' ? PROMPT_ID_PERSONAL_LESSONS : PROMPT_ID;
+                }
+
+                const { data: updatedLessonPlanChat, error: timestampError } = await supabase
+                    .from('chats')
+                    .update(updateFields)
+                    .eq('chat_id', existingChat.chat_id)
+                    .eq('user_id', user.id)
+                    .select()
+                    .single();
+
+                if (timestampError) {
+                    console.error('Error updating timestamp for reused lesson plan chat:', timestampError);
+                } else if (updatedLessonPlanChat) {
+                    existingChat = updatedLessonPlanChat;
+                }
+
+                let conversationId = existingChat.conversation_id;
+                if (!conversationId) {
+                    const { v4: uuidv4 } = require('uuid');
+                    conversationId = uuidv4();
+                    const { error: updateError } = await supabase
+                        .from('chats')
+                        .update({ conversation_id: conversationId })
+                        .eq('chat_id', existingChat.chat_id)
+                        .eq('user_id', user.id);
+                    if (updateError) {
+                        console.error('Error updating conversation_id for legacy lesson plan chat:', updateError);
+                        conversationId = existingChat.thread_id || conversationId;
+                    }
+                }
+
+                const chat = { ...existingChat };
+                delete chat.thread_id;
+                delete chat.conversation_id;
+
+                return {
+                    chat,
+                    conversation_id: conversationId,
+                    thread_id: conversationId,
+                    isReusedChat: true
+                };
+            }
+            // If no existing lesson plan chat found, continue to create new one with predictable title
         }
         
         // Determine initial title - use "New Chat" to trigger AI title generation
@@ -260,6 +334,9 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '',
         if (prepMatch) {
             title = `Prep digest for ${prepMatch[1].trim()}`;
             console.log('[DEBUG] Generated prep digest title:', title);
+        } else if (lessonPlanMatch) {
+            title = `Lesson plan for ${lessonPlanMatch[1].trim()}`;
+            console.log('[DEBUG] Generated lesson plan title:', title);
         } else {
             // For regular chats, start with "New Chat" so AI title generation can trigger
             title = "New Chat";
@@ -346,6 +423,45 @@ const findPrepDigestChat = async (user, studentName) => {
         return chats && chats.length > 0 ? chats[0] : null;
     } catch (error) {
         console.error('Unexpected error finding prep digest chat:', error);
+        return null;
+    }
+};
+
+/**
+ * Find existing lesson plan chat for a user by student name
+ * @param {Object} user - User object
+ * @param {string} studentName - Name of the student
+ * @returns {Object|null} Existing lesson plan chat or null if not found
+ */
+const findLessonPlanChat = async (user, studentName) => {
+    if (!user || !user.id || !studentName) {
+        console.error('Invalid parameters for findLessonPlanChat:', { user: !!user, userId: user?.id, studentName });
+        return null;
+    }
+
+    const lessonPlanTitle = `Lesson plan for ${studentName}`;
+
+    try {
+        const { data: chats, error } = await supabase
+            .from('chats')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('title', lessonPlanTitle)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (error) {
+            console.error('Database error finding lesson plan chat:', error);
+            return null;
+        }
+
+        if (chats && chats.length > 1) {
+            console.warn(`Found ${chats.length} lesson plan chats for ${studentName}. Using most recent.`);
+        }
+
+        return chats && chats.length > 0 ? chats[0] : null;
+    } catch (error) {
+        console.error('Unexpected error finding lesson plan chat:', error);
         return null;
     }
 };

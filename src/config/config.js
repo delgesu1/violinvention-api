@@ -69,29 +69,29 @@ module.exports = {
       key: envVars.OPENAI_API_KEY,
       projectId: envVars.OPENAI_PROJECT_ID, // Required for project-scoped keys
       promptId: envVars.PROMPT_ID || 'pmpt_68a813200634819093ee3c75a18916b00f89c46dc51e879f',
-      promptVersion: envVars.PROMPT_VERSION || '38',
+      promptVersion: envVars.PROMPT_VERSION || null,
       promptInstructions: envVars.PROMPT_INSTRUCTIONS || null,
       vectorStoreId: envVars.VECTOR_STORE_ID || 'vs_rnnqexe2zwkUBkn5NInfTRt4', // Legacy, kept for migration
       assistantId: envVars.ASSISTANT_ID, // Legacy, kept for migration
       model: envVars.OPENAI_API_MODEL || 'gpt-5',
       personalLessonsPromptId: envVars.PROMPT_ID_PERSONAL_LESSONS || 'pmpt_690724bdde1081949ff40ab0fcd6486209aaa8aad0425664',
-      personalLessonsPromptVersion: envVars.PROMPT_VERSION_PERSONAL_LESSONS || '1',
+      personalLessonsPromptVersion: envVars.PROMPT_VERSION_PERSONAL_LESSONS || null,
       personalLessonsPromptInstructions: envVars.PROMPT_INSTRUCTIONS_PERSONAL_LESSONS || null,
       personalLessonsDeepDivePromptId: envVars.PROMPT_ID_PERSONAL_LESSONS_DEEPDIVE || 'pmpt_690723b2773c819393cc4536e64b882c0abf664c9de35b31',
-      personalLessonsDeepDivePromptVersion: envVars.PROMPT_VERSION_PERSONAL_LESSONS_DEEPDIVE || '2',
+      personalLessonsDeepDivePromptVersion: envVars.PROMPT_VERSION_PERSONAL_LESSONS_DEEPDIVE || null,
       personalLessonsDeepDivePromptInstructions: envVars.PROMPT_INSTRUCTIONS_PERSONAL_LESSONS_DEEPDIVE || null,
       lessonPlanPromptId: envVars.PROMPT_ID_LESSON_PLAN || 'pmpt_691e61cef9b48190bfccf079033837c107cb8023538d50e1',
       lessonPlanPromptVersion: envVars.PROMPT_VERSION_LESSON_PLAN || null,
       lessonPlanPromptInstructions: envVars.PROMPT_INSTRUCTIONS_LESSON_PLAN || null,
       deepThinkPromptId: envVars.PROMPT_ID_DEEPTHINK || 'pmpt_68e6212f66648190b909ceeba3e2b514051a81413723cdec',
-      deepThinkPromptVersion: envVars.PROMPT_VERSION_DEEPTHINK || '3',
+      deepThinkPromptVersion: envVars.PROMPT_VERSION_DEEPTHINK || null,
       deepThinkPromptInstructions: envVars.PROMPT_INSTRUCTIONS_DEEPTHINK || null,
     },
     botClient:{
       key: envVars.OPENAI_API_KEY_BOT || envVars.OPENAI_API_KEY,
       projectId: envVars.OPENAI_PROJECT_ID_BOT || envVars.OPENAI_PROJECT_ID, // Required for project-scoped keys
       promptId: envVars.PROMPT_ID_BOT || 'pmpt_68ae7e8cdf708193afe84839f885f83f0bde76623c4cf917',
-      promptVersion: envVars.PROMPT_VERSION_BOT || '1',
+      promptVersion: envVars.PROMPT_VERSION_BOT || null,
       assistantId: envVars.ASSISTANT_ID_BOT, // Legacy
       model: envVars.OPENAI_API_MODEL_BOT || 'gpt-5-nano',
     }
@@ -103,6 +103,6 @@ module.exports = {
     chunkSummarizeThreshold: envVars.MEMORY_CHUNK_SUMMARIZE_THRESHOLD,
     summarizerModel: envVars.MEMORY_SUMMARIZER_MODEL || 'gpt-5.1-nano',
     globalSummaryPromptId: envVars.PROMPT_ID_SUMMARY_GLOBAL || 'pmpt_6917ebe9367c819396fe4840cf0f0e050c18a965a3366120',
-    globalSummaryPromptVersion: envVars.PROMPT_VERSION_SUMMARY_GLOBAL || '1'
+    globalSummaryPromptVersion: envVars.PROMPT_VERSION_SUMMARY_GLOBAL || null
   }
 };
