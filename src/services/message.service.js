@@ -350,7 +350,7 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         const metadataPayload = {
             model_variant: modelVariant,
             ...(lesson_context ? { lesson_context: JSON.stringify(lesson_context) } : {}),
-            ...(isLessonPlanChat ? { lesson_plan_prompt: true } : {})
+            ...(isLessonPlanChat ? { lesson_plan_prompt: 'true' } : {})
         };
 
         let responseOptions;
