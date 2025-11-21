@@ -190,8 +190,10 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         }
         const isDeepThink = modelVariant === 'arco-pro';
 
-        const userMessageContent = `${message} ${instruction_token}`;
-        const userDisplayContent = message; // Clean message for display
+        const userDisplayContent = message; // Clean message for display and reuse detection
+        const userMemoryContent = (lesson_plan_prompt && instruction_token)
+            ? `${message}\n\n${instruction_token}`.trim()
+            : `${message} ${instruction_token}`.trim();
         
         console.log('[Backend sendMessage] OpenAI Input Prompt:', {
             originalMessage: message,
@@ -773,6 +775,9 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                 chat_id: chatId,
                 user_id: user.id,
                 lesson_context: lesson_context || null,
+                metadata: {
+                    ...(lesson_plan_prompt ? { is_lesson_plan: true, lesson_plan_full_context: userMemoryContent } : {}),
+                }
             })
             .select()
             .single();
@@ -862,7 +867,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
             promptInstructions = PROMPT_INSTRUCTIONS_DEEPTHINK || promptInstructions;
         }
 
-        contextualSegments.push(userMessageContent);
+        contextualSegments.push(userMemoryContent);
         const contextualInput = contextualSegments.filter(Boolean).join('\n\n');
 
         logLLMInput('sendFirstMessage.main', contextualInput, {

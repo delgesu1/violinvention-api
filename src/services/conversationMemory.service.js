@@ -238,7 +238,15 @@ const fetchMessagesAfterCursor = async (chatId, userId, lastMessageId, { exclude
       return [];
     }
 
-    return (data || []).filter((row) => !excludeSet.has(row.message_id));
+    return (data || [])
+      .filter((row) => !excludeSet.has(row.message_id))
+      .map((row) => {
+        // Use stored full context for lesson-plan messages when available
+        const fullContext = row?.metadata?.lesson_plan_full_context;
+        return fullContext
+          ? { ...row, content: fullContext }
+          : row;
+      });
   } catch (err) {
     console.error('[conversationMemory] Unexpected error fetching messages', err);
     return [];
