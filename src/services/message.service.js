@@ -191,9 +191,11 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         const isDeepThink = modelVariant === 'arco-pro';
 
         const userDisplayContent = message; // Clean message for display and reuse detection
-        const userMemoryContent = (lesson_plan_prompt && instruction_token)
+        const isLessonPlanChat = chat.prompt_id === PROMPT_ID_LESSON_PLAN;
+        const userMemoryContent = isLessonPlanChat && instruction_token
             ? `${message}\n\n${instruction_token}`.trim()
             : `${message} ${instruction_token}`.trim();
+        const userMessageContent = userMemoryContent;
         
         console.log('[Backend sendMessage] OpenAI Input Prompt:', {
             originalMessage: message,
@@ -348,7 +350,7 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         const metadataPayload = {
             model_variant: modelVariant,
             ...(lesson_context ? { lesson_context: JSON.stringify(lesson_context) } : {}),
-            ...(lesson_plan_prompt ? { lesson_plan_prompt: true } : {})
+            ...(isLessonPlanChat ? { lesson_plan_prompt: true } : {})
         };
 
         let responseOptions;
@@ -776,7 +778,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                 user_id: user.id,
                 lesson_context: lesson_context || null,
                 metadata: {
-                    ...(lesson_plan_prompt ? { is_lesson_plan: true, lesson_plan_full_context: userMemoryContent } : {}),
+                    ...(lesson_plan_prompt ? { is_lesson_plan: true, lesson_plan_full_context: userMessageContent } : {}),
                 }
             })
             .select()
@@ -867,7 +869,7 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
             promptInstructions = PROMPT_INSTRUCTIONS_DEEPTHINK || promptInstructions;
         }
 
-        contextualSegments.push(userMemoryContent);
+        contextualSegments.push(userMessageContent);
         const contextualInput = contextualSegments.filter(Boolean).join('\n\n');
 
         logLLMInput('sendFirstMessage.main', contextualInput, {
