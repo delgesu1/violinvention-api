@@ -399,6 +399,59 @@ const loadTurnsSinceSummary = async ({ chatId, userId, lastSummarizedMessageId, 
   return groupMessagesIntoTurns(messages);
 };
 
+const fetchPinnedLessonPlanTurn = async (chatId, userId) => {
+  try {
+    // Latest lesson-plan user message
+    const { data: lpUser, error: lpError } = await supabase
+      .from('messages')
+      .select('message_id, role, content, metadata, created_at')
+      .eq('chat_id', chatId)
+      .eq('user_id', userId)
+      .eq('role', 'user')
+      .eq('metadata->>is_lesson_plan', 'true')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (lpError) {
+      if (lpError.code !== 'PGRST116') {
+        console.error('[conversationMemory] Failed to fetch lesson-plan user turn', { chat_id: chatId, error: lpError });
+      }
+      return null;
+    }
+
+    if (!lpUser) {
+      return null;
+    }
+
+    // Optional assistant reply immediately after that user message
+    const { data: lpAssistant, error: lpAssistantError } = await supabase
+      .from('messages')
+      .select('message_id, role, content, metadata, created_at')
+      .eq('chat_id', chatId)
+      .eq('user_id', userId)
+      .eq('role', 'assistant')
+      .gt('created_at', lpUser.created_at)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (lpAssistantError && lpAssistantError.code !== 'PGRST116') {
+      console.error('[conversationMemory] Failed to fetch lesson-plan assistant turn', { chat_id: chatId, error: lpAssistantError });
+    }
+
+    const lpUserContent = lpUser?.metadata?.lesson_plan_full_context || lpUser.content;
+
+    return {
+      user: { ...lpUser, content: lpUserContent },
+      assistant: lpAssistant || null,
+    };
+  } catch (err) {
+    console.error('[conversationMemory] Unexpected error fetching pinned lesson-plan turn', err);
+    return null;
+  }
+};
+
 const buildMemoryContext = async ({ chatId, userId, excludeMessageIds = [], overrides = {} }) => {
   const knobs = getMemoryKnobs(overrides);
   const brief = await getConversationMemory(chatId);
@@ -413,6 +466,33 @@ const buildMemoryContext = async ({ chatId, userId, excludeMessageIds = [], over
   let summaryForPrompt = initialSummary;
   let tailTurns = turns.slice(-knobs.kRawTurns);
   let droppedTailTurns = 0;
+
+  // Ensure the latest lesson-plan turn (full context + assistant reply) is present in the tail
+  const pinnedLessonPlanTurn = await fetchPinnedLessonPlanTurn(chatId, userId);
+  if (pinnedLessonPlanTurn) {
+    const lpUserId = pinnedLessonPlanTurn.user?.message_id;
+    let injected = false;
+    tailTurns = tailTurns.map((turn) => {
+      if (lpUserId && turn?.user?.message_id === lpUserId) {
+        injected = true;
+        return {
+          user: { ...turn.user, content: pinnedLessonPlanTurn.user?.content || turn.user.content },
+          assistant: pinnedLessonPlanTurn.assistant || turn.assistant || null,
+        };
+      }
+      return turn;
+    });
+
+    if (!injected) {
+      tailTurns = [
+        {
+          user: pinnedLessonPlanTurn.user,
+          assistant: pinnedLessonPlanTurn.assistant,
+        },
+        ...tailTurns,
+      ];
+    }
+  }
 
   const recomputeMemoryBlock = () => composeMemoryBlock(summaryForPrompt, tailTurns);
   let memoryText = recomputeMemoryBlock();
