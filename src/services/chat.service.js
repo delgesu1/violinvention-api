@@ -167,8 +167,17 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '',
         const prepDigestPattern = /^Prep digest for ([^\n]+)$/m;
         const lessonPlanPattern = /^Lesson plan for ([^\n]+)$/m;
 
+        // Helper to extract student name from instruction_token for lesson plans
+        const extractStudentFromInstruction = (token = '') => {
+            if (!token) return null;
+            // Matches "Here is Anthony's recent lesson history"
+            const m = token.match(/Here is\s+(.+?)['’]s\s+recent lesson history/i);
+            return m && m[1] ? m[1].trim() : null;
+        };
+
         const prepMatch = cleanMessage.match(prepDigestPattern);
         const lessonPlanMatch = cleanMessage.match(lessonPlanPattern);
+        const studentFromInstruction = extractStudentFromInstruction(instruction_token);
 
         if (prepMatch) {
             // This is a prep digest message - check for existing chat
@@ -254,12 +263,12 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '',
                 };
             }
             // If no existing prep chat found, continue to create new one with predictable title
-        } else if (lessonPlanMatch) {
+        } else if (lessonPlanMatch || (prompt_id_override === PROMPT_ID_LESSON_PLAN) || chat_mode === 'arcoai' && studentFromInstruction) {
             // Lesson plan auto message: reuse a single chat per student, similar to prep digest behavior
-            const studentName = lessonPlanMatch[1].trim();
+            const studentName = lessonPlanMatch?.[1]?.trim() || studentFromInstruction;
             console.log('[DEBUG] Lesson plan detected:', {
                 studentName,
-                matchedPattern: lessonPlanMatch[0],
+                matchedPattern: lessonPlanMatch ? lessonPlanMatch[0] : '(lesson_plan flag)',
                 fullMessage: cleanMessage.substring(0, 100) + '...'
             });
 
@@ -275,7 +284,7 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '',
 
                 await clearChatMessages(existingChat.chat_id, user.id);
 
-                const updateFields = { updated_at: new Date().toISOString() };
+                const updateFields = { updated_at: new Date().toISOString(), title: `Lesson plan for ${studentName}` };
                 if (prompt_id_override) {
                     updateFields.prompt_id = prompt_id_override;
                 }
@@ -327,15 +336,15 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '',
             // If no existing lesson plan chat found, continue to create new one with predictable title
         }
         
-        // Determine initial title - use "New Chat" to trigger AI title generation
+        // Determine initial title - use predictable titles for prep/lesson plan to support reuse
         let title;
 
-        // Special handling for prep digest titles - these get explicit titles immediately
         if (prepMatch) {
             title = `Prep digest for ${prepMatch[1].trim()}`;
             console.log('[DEBUG] Generated prep digest title:', title);
-        } else if (lessonPlanMatch) {
-            title = `Lesson plan for ${lessonPlanMatch[1].trim()}`;
+        } else if (lessonPlanMatch || studentFromInstruction) {
+            const studentNameForTitle = (lessonPlanMatch?.[1]?.trim() || studentFromInstruction || 'Student');
+            title = `Lesson plan for ${studentNameForTitle}`;
             console.log('[DEBUG] Generated lesson plan title:', title);
         } else {
             // For regular chats, start with "New Chat" so AI title generation can trigger
@@ -446,7 +455,10 @@ const findLessonPlanChat = async (user, studentName) => {
             .from('chats')
             .select('*')
             .eq('user_id', user.id)
-            .eq('title', lessonPlanTitle)
+            .or([
+                `ilike(title, "${lessonPlanTitle}")`,
+                `and(prompt_id.eq.${PROMPT_ID_LESSON_PLAN}, ilike(title, "%${studentName}%"))`
+            ].join(','))
             .order('created_at', { ascending: false })
             .limit(1);
 
