@@ -1,4 +1,4 @@
-const { PROMPT_ID, PROMPT_ID_PERSONAL_LESSONS } = require("../config/openai.js");
+const { PROMPT_ID, PROMPT_ID_PERSONAL_LESSONS, PROMPT_ID_LESSON_PLAN } = require("../config/openai.js");
 const { supabase } = require("../config/supabase.js");
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
