@@ -284,13 +284,21 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '',
 
                 await clearChatMessages(existingChat.chat_id, user.id);
 
-                const updateFields = { updated_at: new Date().toISOString(), title: `Lesson plan for ${studentName}` };
-                if (prompt_id_override) {
-                    updateFields.prompt_id = prompt_id_override;
-                }
-                if (chat_mode && ['arcoai', 'personal_lessons'].includes(chat_mode) && chat_mode !== existingChat.chat_mode) {
+                // Reset chat to requested mode when reusing for new lesson plan
+                // (The first message will use PROMPT_ID_LESSON_PLAN via prompt_id_override,
+                // but the chat's stored prompt_id should be the default for the mode
+                // so subsequent turns can use arcoai or personal_lessons freely)
+                const updateFields = {
+                    updated_at: new Date().toISOString(),
+                    title: `Lesson plan for ${studentName}`
+                };
+
+                // Reset to requested chat_mode and its default prompt
+                if (chat_mode && ['arcoai', 'personal_lessons'].includes(chat_mode)) {
                     updateFields.chat_mode = chat_mode;
-                    updateFields.prompt_id = chat_mode === 'personal_lessons' ? PROMPT_ID_PERSONAL_LESSONS : PROMPT_ID;
+                    updateFields.prompt_id = chat_mode === 'personal_lessons'
+                        ? PROMPT_ID_PERSONAL_LESSONS
+                        : PROMPT_ID; // Default arcoai prompt, not lesson plan prompt
                 }
 
                 const { data: updatedLessonPlanChat, error: timestampError } = await supabase
@@ -338,11 +346,13 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '',
         
         // Determine initial title - use predictable titles for prep/lesson plan to support reuse
         let title;
+        let isLessonPlan = false;
 
         if (prepMatch) {
             title = `Prep digest for ${prepMatch[1].trim()}`;
             console.log('[DEBUG] Generated prep digest title:', title);
         } else if (lessonPlanMatch || studentFromInstruction) {
+            isLessonPlan = true;
             const studentNameForTitle = (lessonPlanMatch?.[1]?.trim() || studentFromInstruction || 'Student');
             title = `Lesson plan for ${studentNameForTitle}`;
             console.log('[DEBUG] Generated lesson plan title:', title);
@@ -351,14 +361,22 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '',
             title = "New Chat";
             console.log('[DEBUG] Created chat with "New Chat" title to trigger AI generation');
         }
-        
+
         // Generate conversation ID locally - conversations are created implicitly in Responses API
         const { v4: uuidv4 } = require('uuid');
         const conversationId = uuidv4();
-        
+
         // Create chat in database
+        // Note: For lesson plans, prompt_id_override (PROMPT_ID_LESSON_PLAN) is used only for the
+        // first message. The chat's stored prompt_id should be the default for its mode, allowing
+        // free mode switching in subsequent turns.
         const promptId = prompt_id_override
-            ? prompt_id_override
+            ? (isLessonPlan
+                // For lesson plans, ignore the override and use the mode's default prompt
+                // (the override is applied per-message, not stored in chat)
+                ? (chat_mode === 'personal_lessons' ? PROMPT_ID_PERSONAL_LESSONS : PROMPT_ID)
+                // For non-lesson plans, use the override if provided
+                : prompt_id_override)
             : (chat_mode === 'personal_lessons' ? PROMPT_ID_PERSONAL_LESSONS : PROMPT_ID);
 
         const { data: chatData, error } = await supabase
@@ -367,7 +385,7 @@ const createChatWithFirstMessage = async (user, message, instruction_token = '',
                 conversation_id: conversationId,
                 thread_id: conversationId, // Keep for backward compatibility
                 prompt_id: promptId,
-                chat_mode,
+                chat_mode, // Use requested mode (no special handling for lesson plans)
                 user_id: user.id,
                 title,
             })
@@ -407,28 +425,29 @@ const findPrepDigestChat = async (user, studentName) => {
         console.error('Invalid parameters for findPrepDigestChat:', { user: !!user, userId: user?.id, studentName });
         return null;
     }
-    
+
     const prepTitle = `Prep digest for ${studentName}`;
-    
+
     try {
         const { data: chats, error } = await supabase
             .from('chats')
             .select('*')
             .eq('user_id', user.id)
             .eq('title', prepTitle)
+            .eq('is_deleted', false)
             .order('created_at', { ascending: false })
             .limit(1);
-        
+
         if (error) {
             console.error('Database error finding prep digest chat:', error);
             return null;
         }
-        
+
         if (chats && chats.length > 1) {
             // Multiple prep digest chats found - this shouldn't happen but let's handle it
             console.warn(`Found ${chats.length} prep digest chats for ${studentName}. Using most recent.`);
         }
-        
+
         return chats && chats.length > 0 ? chats[0] : null;
     } catch (error) {
         console.error('Unexpected error finding prep digest chat:', error);
@@ -451,14 +470,13 @@ const findLessonPlanChat = async (user, studentName) => {
     const lessonPlanTitle = `Lesson plan for ${studentName}`;
 
     try {
+        // Use exact title match with .eq() to avoid SQL injection and ensure predictable matching
         const { data: chats, error } = await supabase
             .from('chats')
             .select('*')
             .eq('user_id', user.id)
-            .or([
-                `ilike(title, "${lessonPlanTitle}")`,
-                `and(prompt_id.eq.${PROMPT_ID_LESSON_PLAN}, ilike(title, "%${studentName}%"))`
-            ].join(','))
+            .eq('title', lessonPlanTitle)
+            .eq('is_deleted', false)
             .order('created_at', { ascending: false })
             .limit(1);
 
@@ -526,4 +544,4 @@ const clearChatMessages = async (chatId, userId) => {
     }
 };
 
-module.exports = { createChat, updateChat, getAllChats, deleteChat, createChatWithFirstMessage, findPrepDigestChat, clearChatMessages };
+module.exports = { createChat, updateChat, getAllChats, deleteChat, createChatWithFirstMessage, findPrepDigestChat, findLessonPlanChat, clearChatMessages };
