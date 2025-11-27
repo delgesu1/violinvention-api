@@ -14,9 +14,11 @@ test('promptConfig generates summary prompt with instrument/genre substitutions'
   assert.ok(prompt.toLowerCase().includes('practice'));
 });
 
-test('promptConfig generates title prompt with student variant when requested', () => {
-  const prompt = promptConfigService.generateTitlePrompt('violin', 'classical', true);
-  assert.ok(prompt.toLowerCase().includes('student'));
+test('promptConfig summary prompt includes structured JSON instructions', () => {
+  const prompt = promptConfigService.generateSummaryPrompt('violin', 'classical');
+  assert.ok(prompt.includes('STRUCTURED OUTPUT'));
+  assert.ok(prompt.toLowerCase().includes('json object'));
+  assert.ok(prompt.includes('"summary_markdown"'));
 });
 
 test('promptConfig validates instruments/genres', () => {
