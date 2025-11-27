@@ -22,6 +22,63 @@ const { buildMemoryContext, maybeUpdateGlobalSummary, approxTokens, DEFAULT_MEMO
 const { logLLMInput, logLLMOutput } = require('../utils/llmLogger');
 const { searchVectorStore } = require('./vectorStore.service');
 
+/**
+ * Pure helper for prompt selection based on chat mode, model variant, and lesson-plan override.
+ * Returns promptId, promptInstructions, and whether to include personal vector search.
+ */
+const selectPromptConfig = ({
+    chat_mode = 'arcoai',
+    model = 'arco',
+    lesson_plan_prompt = false,
+}) => {
+    const normalizedMode = typeof chat_mode === 'string' ? chat_mode.toLowerCase() : 'arcoai';
+    const normalizedModel = typeof model === 'string' ? model.toLowerCase().trim() : 'arco';
+    const isDeepThink = normalizedModel === 'arco-pro';
+
+    // Lesson plan override takes priority regardless of mode/model
+    if (lesson_plan_prompt) {
+        return {
+            promptId: PROMPT_ID_LESSON_PLAN || PROMPT_ID,
+            promptInstructions: PROMPT_INSTRUCTIONS_LESSON_PLAN || null,
+            includeVectorSearch: false,
+            modelVariant: 'lesson_plan',
+        };
+    }
+
+    // Personal lessons mode
+    if (normalizedMode === 'personal_lessons') {
+        // Deep dive prompt fallback chain: personal deep dive -> deep think -> personal standard
+        const promptId = isDeepThink
+            ? (PROMPT_ID_PERSONAL_LESSONS_DEEPDIVE || PROMPT_ID_DEEPTHINK || PROMPT_ID_PERSONAL_LESSONS || PROMPT_ID)
+            : (PROMPT_ID_PERSONAL_LESSONS || PROMPT_ID);
+        const promptInstructions = isDeepThink
+            ? (PROMPT_INSTRUCTIONS_PERSONAL_LESSONS_DEEPDIVE || PROMPT_INSTRUCTIONS_DEEPTHINK || PROMPT_INSTRUCTIONS_PERSONAL_LESSONS || PROMPT_INSTRUCTIONS)
+            : (PROMPT_INSTRUCTIONS_PERSONAL_LESSONS || PROMPT_INSTRUCTIONS);
+
+        return {
+            promptId,
+            promptInstructions,
+            includeVectorSearch: true,
+            modelVariant: isDeepThink ? 'personal_lessons:deep_dive' : 'personal_lessons:standard',
+        };
+    }
+
+    // ArcoAI (default) with optional deep dive
+    const promptId = isDeepThink
+        ? (PROMPT_ID_DEEPTHINK || PROMPT_ID)
+        : PROMPT_ID;
+    const promptInstructions = isDeepThink
+        ? (PROMPT_INSTRUCTIONS_DEEPTHINK || PROMPT_INSTRUCTIONS)
+        : PROMPT_INSTRUCTIONS;
+
+    return {
+        promptId,
+        promptInstructions,
+        includeVectorSearch: false,
+        modelVariant: isDeepThink ? 'arco:deep_dive' : 'arco:standard',
+    };
+};
+
 // Helper function to strip citation markers from OpenAI responses
 const stripCitations = (text) => {
     if (!text) return text;
@@ -1093,4 +1150,4 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
     }
 };
 
-module.exports = { sendMessage, findAllMessages, sendFirstMessage };
+module.exports = { sendMessage, findAllMessages, sendFirstMessage, selectPromptConfig };
