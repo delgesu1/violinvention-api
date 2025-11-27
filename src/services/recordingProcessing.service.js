@@ -191,7 +191,7 @@ const processRecording = async ({ transcript, instrumentPreference, genrePrefere
   const rawStructuredResponse = await callResponsesApi({
     model: SUMMARIZATION_MODEL,
     instructions: summaryPrompt,
-    input: ['Return a json object as specified. Transcript follows:', transcript],
+    input: `Return a JSON object as specified. Transcript follows:\n${transcript}`,
     options: {
       text: { format: { type: 'json_object' }, verbosity: 'low' },
       reasoning: { effort: 'low' },
