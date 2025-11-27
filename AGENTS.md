@@ -41,7 +41,7 @@ Swagger docs are available in development at `http://localhost:<PORT>/v1/docs`.
 - Chat + messaging flows powered by OpenAI Responses API with conversation memory.
 - Per-user vector stores for lesson summaries/transcripts with upload, delete, and search.
 - PDF proxy endpoint that forwards HTML to an internal PDF service.
-- Lesson recording processing endpoint (summary + tagging).
+- Lesson recording processing endpoint (single structured summarization that returns summary, student, title, pieces, themes).
 - Auto-generated Swagger docs (development only).
 
 ## Commands

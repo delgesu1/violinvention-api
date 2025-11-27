@@ -80,7 +80,6 @@ const parseStructuredSummaryResponse = (rawText) => {
     title: null,
     pieces: [],
     themes: [],
-    parsed: null,
   };
 
   if (!rawText || typeof rawText !== 'string') {
@@ -89,8 +88,6 @@ const parseStructuredSummaryResponse = (rawText) => {
 
   try {
     const parsed = JSON.parse(rawText);
-    baseResult.parsed = parsed;
-
     if (parsed && typeof parsed.summary_markdown === 'string' && parsed.summary_markdown.trim()) {
       baseResult.summaryMarkdown = parsed.summary_markdown.trim();
     }
@@ -198,7 +195,7 @@ const processRecording = async ({ transcript, instrumentPreference, genrePrefere
     },
   });
 
-  const { summaryMarkdown, student, title: structuredTitle, pieces, themes, parsed } =
+  const { summaryMarkdown, student, title: structuredTitle, pieces, themes } =
     parseStructuredSummaryResponse(rawStructuredResponse);
 
   if (!summaryMarkdown) {
@@ -211,11 +208,10 @@ const processRecording = async ({ transcript, instrumentPreference, genrePrefere
   return {
     summary: summaryMarkdown,
     studentTag,
-    rawTagResponse: rawStructuredResponse,
     title,
     pieces,
     themes,
-    rawStructuredParsed: parsed,
+    rawStructuredResponse,
   };
 };
 
