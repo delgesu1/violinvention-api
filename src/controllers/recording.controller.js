@@ -16,6 +16,8 @@ const processRecording = catchAsync(async (req, res) => {
     student_tag: result.studentTag || null,
     title: result.title || null,
     raw_tag_response: result.rawTagResponse || null,
+    pieces: result.pieces || [],
+    themes: result.themes || [],
   });
 });
 
