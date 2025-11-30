@@ -1,15 +1,22 @@
-FROM mcr.microsoft.com/playwright:v1.48.0-focal
+FROM node:20-slim
+
+# Install Chromium and required dependencies
+RUN apt-get update && apt-get install -y \
+    chromium \
+    fonts-liberation \
+    fonts-noto-color-emoji \
+    --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
+# Skip Playwright browser download - using system Chromium
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /workspace/pdf-service
 
-# Copy package files
 COPY package*.json ./
+RUN npm ci --omit=dev --ignore-scripts
 
-# Skip browser download - already included in base image
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-RUN npm ci --omit=dev
-
-# Copy application code
 COPY . .
 
 EXPOSE 3001

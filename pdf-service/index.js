@@ -38,14 +38,22 @@ let browser = null;
 // Initialize Playwright browser
 async function initBrowser() {
   try {
-    browser = await chromium.launch({
+    const launchOptions = {
       headless: true,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage'
       ]
-    });
+    };
+
+    // Use system Chromium if path is provided (for Docker deployments)
+    if (process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) {
+      launchOptions.executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+      console.log(`Using system Chromium at: ${launchOptions.executablePath}`);
+    }
+
+    browser = await chromium.launch(launchOptions);
     console.log('Playwright browser initialized');
   } catch (error) {
     console.error('Failed to initialize browser:', error);
