@@ -694,6 +694,15 @@ const findAllMessages = async (chat_id, user) => {
 };
 
 const sendFirstMessage = async ({ message, instruction_token, lesson_context, chat_mode = 'arcoai', model = 'arco', lesson_plan_prompt = false, user, req, res }) => {
+    console.log('[sendFirstMessage] Starting with params:', {
+        messageLength: message?.length,
+        instructionTokenLength: instruction_token?.length,
+        chat_mode,
+        model,
+        lesson_plan_prompt,
+        userId: user?.id,
+    });
+
     res.writeHead(200, { "Content-type": "text/plain" });
 
     const abortController = new AbortController();
@@ -743,6 +752,8 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
     try {
         // Create chat with first message using Responses API (conversation)
         const promptOverrideId = lesson_plan_prompt ? PROMPT_ID_LESSON_PLAN : null;
+        console.log('[sendFirstMessage] Creating/reusing chat with promptOverrideId:', promptOverrideId);
+
         const { chat, conversation_id, isReusedChat } = await createChatWithFirstMessage(
             user,
             message,
@@ -752,7 +763,14 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
         );
         chatId = chat.chat_id;
         conversationId = conversation_id;
-        
+
+        console.log('[sendFirstMessage] Chat ready:', {
+            chatId,
+            conversationId,
+            isReusedChat,
+            chatTitle: chat.title,
+        });
+
         // Send the chat info to frontend first, include reuse flag
         const chatCreatedEvent = {
             type: 'chat_created',
@@ -872,8 +890,13 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
 
         if (lesson_plan_prompt) {
             promptId = PROMPT_ID_LESSON_PLAN || promptId;
-            // Prefer lesson-plan instructions if supplied; otherwise let the prompt’s default handle it.
+            // Prefer lesson-plan instructions if supplied; otherwise let the prompt's default handle it.
             promptInstructions = PROMPT_INSTRUCTIONS_LESSON_PLAN || null;
+            console.log('[sendFirstMessage] Using lesson plan prompt:', {
+                promptId,
+                hasPromptInstructions: !!promptInstructions,
+                PROMPT_ID_LESSON_PLAN_env: PROMPT_ID_LESSON_PLAN,
+            });
         } else if (chat_mode === 'personal_lessons') {
             promptId = PROMPT_ID_PERSONAL_LESSONS;
             promptInstructions = PROMPT_INSTRUCTIONS_PERSONAL_LESSONS;
@@ -1058,6 +1081,12 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
                 if (eventData) res.write(eventData);
             }
         }
+
+        console.log('[sendFirstMessage] Stream loop completed:', {
+            assistantMessageLength: assistantMessageClean.length,
+            responseEnded,
+            wasAborted: abortController.signal.aborted,
+        });
     } catch (error) {
         console.error("Error in sendFirstMessage:", error);
         
