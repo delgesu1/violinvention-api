@@ -404,9 +404,14 @@ const sendMessage = async ({ message, chat_id, instruction_token, lesson_context
         console.log('[Conversation Context] Memory tokens:', approxTokens(memoryBlock));
         console.log('[Conversation Context] Total context tokens:', approxTokens(contextualInput));
 
+        // OpenAI metadata fields have a 512 char limit, so store only a summary
+        const lessonContextSummary = lesson_context && lesson_context.length > 0
+            ? `${lesson_context.length} lessons`
+            : null;
+
         const metadataPayload = {
             model_variant: modelVariant,
-            ...(lesson_context ? { lesson_context: JSON.stringify(lesson_context) } : {}),
+            ...(lessonContextSummary ? { lesson_context: lessonContextSummary } : {}),
             ...(isLessonPlanChat ? { lesson_plan_prompt: 'true' } : {})
         };
 
@@ -962,9 +967,14 @@ const sendFirstMessage = async ({ message, instruction_token, lesson_context, ch
         console.log('[Conversation Context] (first message) Memory tokens:', approxTokens(memoryBlock));
         console.log('[Conversation Context] (first message) Total context tokens:', approxTokens(contextualInput));
 
+        // OpenAI metadata fields have a 512 char limit, so store only a summary
+        const lessonContextSummary = lesson_context && lesson_context.length > 0
+            ? `${lesson_context.length} lessons`
+            : null;
+
         const metadataPayload = {
             model_variant: modelVariant,
-            ...(lesson_context ? { lesson_context: JSON.stringify(lesson_context) } : {})
+            ...(lessonContextSummary ? { lesson_context: lessonContextSummary } : {})
         };
 
         let responseOptions;
