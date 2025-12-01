@@ -9,6 +9,7 @@ const vectorStoreRoute = require('./vectorStore.route');
 const healthRoute = require('./health.route');
 const recordingRoute = require('./recording.route');
 const docsRoute = require('./docs.route');
+const billingRoute = require('./billing.route');
 const config = require('../../config/config');
 
 const router = express.Router();
@@ -46,6 +47,10 @@ const defaultRoutes = [
   {
     path: '/health',
     route: healthRoute,
+  },
+  {
+    path: '/billing',
+    route: billingRoute,
   },
 ];
 

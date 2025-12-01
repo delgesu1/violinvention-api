@@ -29,7 +29,11 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // set security HTTP headers
 app.use(helmet());
 
-// parse json request body
+// Stripe webhook needs raw body for signature verification
+// Must come BEFORE express.json()
+app.use('/v1/billing/webhook', express.raw({ type: 'application/json' }));
+
+// parse json request body (skip for webhook which uses raw)
 app.use(express.json());
 
 // parse urlencoded request body

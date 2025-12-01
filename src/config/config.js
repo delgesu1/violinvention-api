@@ -47,6 +47,16 @@ const envVarsSchema = Joi.object()
     PROMPT_ID_SUMMARY_GLOBAL: Joi.string().optional(),
     PROMPT_VERSION_SUMMARY_GLOBAL: Joi.string().optional(),
 
+    // Stripe billing configuration (optional - billing features disabled if not set)
+    STRIPE_SECRET_KEY: Joi.string().optional(),
+    STRIPE_WEBHOOK_SECRET: Joi.string().optional(),
+    STRIPE_PRICE_STUDENT: Joi.string().optional(),
+    STRIPE_PRICE_TEACHER: Joi.string().optional(),
+    STRIPE_PRICE_STUDIO: Joi.string().optional(),
+    STRIPE_PRICE_TOPUP_5: Joi.string().optional(),
+    STRIPE_PRICE_TOPUP_15: Joi.string().optional(),
+    APP_URL: Joi.string().default('https://arco.app/start'),
+
   })
   .unknown();
 
